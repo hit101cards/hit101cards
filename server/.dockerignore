@@ -1,0 +1,14 @@
+node_modules
+npm-debug.log
+.env
+.env.local
+playerStats.sqlite
+playerStats.sqlite-shm
+playerStats.sqlite-wal
+playerStats.json
+playerStats.json.migrated
+audit.log
+audit.log.*
+.git
+.gitignore
+README.md

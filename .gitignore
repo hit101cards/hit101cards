@@ -1,0 +1,50 @@
+# 依存関係
+node_modules/
+*/node_modules/
+
+# 環境変数 (秘匿情報)
+.env
+.env.local
+.env.*.local
+client/.env
+client/.env.local
+server/.env
+server/.env.local
+
+# ビルド成果物
+client/dist/
+client/.vite/
+*.tsbuildinfo
+
+# 永続データ (サーバーが実行時に生成)
+server/playerStats.sqlite
+server/playerStats.sqlite-shm
+server/playerStats.sqlite-wal
+server/playerStats.json
+server/playerStats.json.migrated
+server/audit.log
+server/audit.log.*
+
+# ログ
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# AI画像生成時のソース画像 (大きいため除外、client/public/ の完成品のみコミット)
+OIG*.jpg
+OIG*.png
+v2_watermarked-*.jpg
+v2_watermarked-*.png
+{*}.jpg
+{*}.png
+
+# OS
+.DS_Store
+Thumbs.db
+
+# エディタ
+.vscode/
+.idea/
+*.swp
+*.swo
