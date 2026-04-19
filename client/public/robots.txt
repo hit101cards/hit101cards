@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://hit101.cards/sitemap.xml

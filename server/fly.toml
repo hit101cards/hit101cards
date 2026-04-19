@@ -1,43 +1,41 @@
-# Fly.io 設定 — Hit101 サーバー
-# 初回デプロイ前に `flyctl launch --no-deploy` で app 名が未使用か確認してください
-# volume は `flyctl volumes create hit101_data --region nrt --size 1` で作成
+# fly.toml app configuration file generated for hit101-server on 2026-04-19T13:06:52+09:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
 
-app = "hit101-server"
-primary_region = "nrt"
+app = 'hit101-server'
+primary_region = 'nrt'
 
 [build]
 
 [env]
-  NODE_ENV = "production"
-  DATA_DIR = "/data"
-  PORT = "3001"
+  DATA_DIR = '/data'
+  NODE_ENV = 'production'
+  PORT = '3001'
 
 [[mounts]]
-  source = "hit101_data"
-  destination = "/data"
+  source = 'hit101_data'
+  destination = '/data'
 
 [http_service]
   internal_port = 3001
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
 
   [http_service.concurrency]
-    type = "connections"
+    type = 'connections'
     hard_limit = 400
     soft_limit = 300
 
   [[http_service.checks]]
-    interval = "30s"
-    timeout = "5s"
-    grace_period = "10s"
-    method = "GET"
-    path = "/health"
-
-# Socket.IO は WebSocket 以外に long-polling も使う
-# Fly.io の http_service は WS を透過的に通すので追加設定は不要
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '10s'
+    method = 'GET'
+    path = '/health'
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
+  size = 'shared-cpu-1x'
+  memory = '256mb'
