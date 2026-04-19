@@ -86,11 +86,12 @@
 - [ ] クライアント内にリンク設置
 
 ### デプロイ（Fly.io 例）
-- [ ] `flyctl auth signup`
-- [ ] `fly launch`（serverディレクトリ、SQLite用volumeを作成）
-- [ ] `fly deploy`
-- [ ] Cloudflare Pages をGitHubリポジトリに接続してクライアントをデプロイ
-- [ ] カスタムドメインを両方に設定
+- [x] `flyctl auth signup` (2026-04-19)
+- [x] `fly launch`（serverディレクトリ、SQLite用volume hit101_data 1GB 作成済）
+- [x] `fly deploy` → https://hit101-server.fly.dev 稼働中
+- [x] Cloudflare Pages をGitHubリポジトリに接続してクライアントをデプロイ
+- [x] カスタムドメイン hit101.cards 設定済、SSL発行済
+- [ ] api.hit101.cards サブドメイン化（任意、ブランド統一）
 
 ### 公開前テスト
 - [ ] 身近な人10人でテストプレイ
