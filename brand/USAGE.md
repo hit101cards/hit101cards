@@ -15,14 +15,16 @@
 | **favicon** (サイト用) | すでに配置済み | `client/public/favicon.svg` |
 | **Apple Touch Icon** (iOSホーム画面) | すでに配置済み | `client/public/apple-touch-icon.png` |
 
-## バナー/ヘッダー画像（OGP兼用）
+## バナー/ヘッダー画像
 
-| 用途 | 推奨ファイル | 備考 |
+| 用途 | 推奨ファイル | サイズ |
 |---|---|---|
-| **SNSシェア時のOGP** | `client/public/og-image.png` | 1200×630、自動で各SNSが取得 |
-| **X ヘッダー** | 別途作成推奨 | 1500×500。og-imageをCanvaで再クロップ |
-| **YouTube チャンネルバナー** | 別途作成推奨 | 2560×1440、セーフエリア1546×423 |
-| **Discord サーバーバナー** | `client/public/og-image.png` を流用可 | Boost Lv1で有効化 |
+| **SNSシェア時のOGP** | `client/public/og-image.png` | 1200×630 |
+| **X ヘッダー** | `brand/banner-x-header.png` | 1500×500 |
+| **YouTube チャンネルバナー** | `brand/banner-youtube.png` | 2560×1440 |
+| **Discord サーバーバナー** | `brand/banner-discord.png` | 960×540（Boost Lv1要） |
+
+いずれも背景のみ。必要なら Canva で「Hit101」の文字を乗せて差し替えてください。
 
 ## 色・フォント（統一ガイド）
 
