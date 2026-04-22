@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { socket } from '../socket';
 import { CumulativeStat } from '../types';
 import RulesModal from './RulesModal';
@@ -25,8 +25,19 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onJoinMatchmaking, err
   const [myStats, setMyStats] = useState<CumulativeStat | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [legalTab, setLegalTab] = useState<'privacy' | 'terms' | null>(null);
+  const roomIdRef = useRef<HTMLInputElement>(null);
 
   const sanitizeRoomId = (v: string) => v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+
+  const handleRoomIdInput = (raw: string) => {
+    const clean = sanitizeRoomId(raw);
+    setRoomId(clean);
+    // DOM の native value が sanitize 後と違う場合のみ上書き
+    // (iOS Safari が余分な文字を挿入した場合の最小限の矯正)
+    if (roomIdRef.current && roomIdRef.current.value !== clean) {
+      roomIdRef.current.value = clean;
+    }
+  };
 
   useEffect(() => {
     if (mode !== 'matchmaking' || !myUUID) return;
@@ -141,19 +152,21 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onJoinMatchmaking, err
             <div>
               <label className="text-green-300 text-sm block mb-1">ルームID</label>
               <input
+                ref={roomIdRef}
                 type="text"
-                lang="en"
                 placeholder="例: AB12CD"
-                value={roomId}
-                onChange={e => setRoomId(sanitizeRoomId(e.target.value))}
-                onCompositionEnd={e => setRoomId(sanitizeRoomId(e.currentTarget.value))}
-                onPaste={e => { e.preventDefault(); setRoomId(sanitizeRoomId(e.clipboardData.getData('text'))); }}
+                defaultValue=""
+                onInput={e => handleRoomIdInput((e.target as HTMLInputElement).value)}
+                onPaste={e => {
+                  e.preventDefault();
+                  handleRoomIdInput(e.clipboardData.getData('text'));
+                }}
                 onKeyDown={e => e.key === 'Enter' && sanitizeName(name) && roomId.trim() && onJoinRoom(sanitizeName(name), roomId.trim())}
                 className="w-full px-4 py-3 rounded-lg bg-green-700 text-white placeholder-green-500 focus:outline-none focus:ring-2 focus:ring-blue-400 transition font-mono tracking-widest text-center text-lg"
                 maxLength={6}
-                autoComplete="one-time-code"
+                autoComplete="off"
                 autoCorrect="off"
-                autoCapitalize="characters"
+                autoCapitalize="off"
                 spellCheck={false}
                 inputMode="text"
                 name="hit101-room-id"
