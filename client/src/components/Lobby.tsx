@@ -25,7 +25,6 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onJoinMatchmaking, err
   const [myStats, setMyStats] = useState<CumulativeStat | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [legalTab, setLegalTab] = useState<'privacy' | 'terms' | null>(null);
-  const [composingRoom, setComposingRoom] = useState(false);
 
   const sanitizeRoomId = (v: string) => v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
 
@@ -146,9 +145,8 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onJoinMatchmaking, err
                 lang="en"
                 placeholder="例: AB12CD"
                 value={roomId}
-                onChange={e => { if (!composingRoom) setRoomId(sanitizeRoomId(e.target.value)); }}
-                onCompositionStart={() => setComposingRoom(true)}
-                onCompositionEnd={e => { setComposingRoom(false); setRoomId(sanitizeRoomId(e.currentTarget.value)); }}
+                onChange={e => setRoomId(sanitizeRoomId(e.target.value))}
+                onCompositionEnd={e => setRoomId(sanitizeRoomId(e.currentTarget.value))}
                 onPaste={e => { e.preventDefault(); setRoomId(sanitizeRoomId(e.clipboardData.getData('text'))); }}
                 onKeyDown={e => e.key === 'Enter' && sanitizeName(name) && roomId.trim() && onJoinRoom(sanitizeName(name), roomId.trim())}
                 className="w-full px-4 py-3 rounded-lg bg-green-700 text-white placeholder-green-500 focus:outline-none focus:ring-2 focus:ring-blue-400 transition font-mono tracking-widest text-center text-lg"
