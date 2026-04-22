@@ -25,6 +25,9 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onJoinMatchmaking, err
   const [myStats, setMyStats] = useState<CumulativeStat | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [legalTab, setLegalTab] = useState<'privacy' | 'terms' | null>(null);
+  const [composingRoom, setComposingRoom] = useState(false);
+
+  const sanitizeRoomId = (v: string) => v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
 
   useEffect(() => {
     if (mode !== 'matchmaking' || !myUUID) return;
@@ -140,18 +143,22 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onJoinMatchmaking, err
               <label className="text-green-300 text-sm block mb-1">ルームID</label>
               <input
                 type="text"
+                lang="en"
                 placeholder="例: AB12CD"
                 value={roomId}
-                onChange={e => setRoomId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
+                onChange={e => { if (!composingRoom) setRoomId(sanitizeRoomId(e.target.value)); }}
+                onCompositionStart={() => setComposingRoom(true)}
+                onCompositionEnd={e => { setComposingRoom(false); setRoomId(sanitizeRoomId(e.currentTarget.value)); }}
+                onPaste={e => { e.preventDefault(); setRoomId(sanitizeRoomId(e.clipboardData.getData('text'))); }}
                 onKeyDown={e => e.key === 'Enter' && sanitizeName(name) && roomId.trim() && onJoinRoom(sanitizeName(name), roomId.trim())}
                 className="w-full px-4 py-3 rounded-lg bg-green-700 text-white placeholder-green-500 focus:outline-none focus:ring-2 focus:ring-blue-400 transition font-mono tracking-widest text-center text-lg"
                 maxLength={6}
-                autoComplete="off"
+                autoComplete="one-time-code"
                 autoCorrect="off"
-                autoCapitalize="off"
+                autoCapitalize="characters"
                 spellCheck={false}
                 inputMode="text"
-                name="roomId"
+                name="hit101-room-id"
               />
             </div>
             <button
