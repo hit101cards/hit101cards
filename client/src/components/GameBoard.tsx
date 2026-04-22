@@ -840,7 +840,7 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
                 animation: 'round-text-pop 2.2s ease-out forwards',
               }}
             >
-              {roundEffect === '101' ? '🎯 101！' : roundEffect === 'joker101' ? '🃏 JOKER！' : '💥 BUST!'}
+              {roundEffect === '101' ? '🎯 101！' : roundEffect === 'joker101' ? '🃏 JOKER！' : '💥 BURST!'}
             </p>
           </div>
         </>

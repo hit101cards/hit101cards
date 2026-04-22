@@ -142,10 +142,16 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onJoinMatchmaking, err
                 type="text"
                 placeholder="例: AB12CD"
                 value={roomId}
-                onChange={e => setRoomId(e.target.value.toUpperCase())}
+                onChange={e => setRoomId(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
                 onKeyDown={e => e.key === 'Enter' && sanitizeName(name) && roomId.trim() && onJoinRoom(sanitizeName(name), roomId.trim())}
                 className="w-full px-4 py-3 rounded-lg bg-green-700 text-white placeholder-green-500 focus:outline-none focus:ring-2 focus:ring-blue-400 transition font-mono tracking-widest text-center text-lg"
                 maxLength={6}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                inputMode="text"
+                name="roomId"
               />
             </div>
             <button
