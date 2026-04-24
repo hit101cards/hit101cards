@@ -40,18 +40,20 @@ function buildAdminSnapshot() {
   const playerList = getAllStats();
   const roomList = [];
   for (const room of rooms.values()) {
+    const curIdx = room.currentPlayerIndex;
     roomList.push({
       id: room.id,
       status: room.status,
       roundCount: room.roundCount || 0,
       isMatchmaking: !!room.isMatchmaking,
       currentTotal: room.currentTotal ?? null,
-      players: room.players.map(p => ({
+      currentPlayerName: (room.status === 'playing' && room.players[curIdx]) ? room.players[curIdx].name : null,
+      players: room.players.map((p, i) => ({
         name: p.name,
         isBot: !!p.isBot,
         lost: !!p.lost,
         disconnected: !!p.disconnected,
-        handCount: p.hand ? p.hand.length : 0,
+        isCurrent: i === curIdx && room.status === 'playing',
       })),
     });
   }
@@ -83,7 +85,7 @@ function renderAdminHtml(snapshot, token) {
       <td>${escapeHtml(r.status)}${r.isMatchmaking ? ' <span class="tag">match</span>' : ''}</td>
       <td>${r.roundCount}</td>
       <td>${r.currentTotal ?? '-'}</td>
-      <td>${r.players.map(p => `${escapeHtml(p.name)}${p.isBot ? '🤖' : ''}${p.lost ? '💀' : ''}${p.disconnected ? '🔌' : ''}(${p.handCount})`).join(', ')}</td>
+      <td>${r.players.map(p => `${p.isCurrent ? '▶ ' : ''}${escapeHtml(p.name)}${p.isBot ? '🤖' : ''}${p.lost ? '💀' : ''}${p.disconnected ? '🔌' : ''}`).join(', ')}</td>
     </tr>`).join('');
   const queueRows = queue.length
     ? queue.map(p => `<li>${escapeHtml(p.name)}${p.uuidPrefix ? ` <code>${escapeHtml(p.uuidPrefix)}…</code>` : ''}</li>`).join('')
@@ -133,7 +135,7 @@ function renderAdminHtml(snapshot, token) {
 
 <h2>進行中ルーム (${roomList.length})</h2>
 ${roomList.length ? `<table>
-<thead><tr><th>ID</th><th>状態</th><th>ラウンド</th><th>合計</th><th>プレイヤー (手札数)</th></tr></thead>
+<thead><tr><th>ID</th><th>状態</th><th>ラウンド</th><th>合計</th><th>プレイヤー (▶=現在手番)</th></tr></thead>
 <tbody>${roomRows}</tbody>
 </table>` : '<p class="dim">ルームなし</p>'}
 
