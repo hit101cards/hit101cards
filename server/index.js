@@ -71,6 +71,7 @@ function buildAdminSnapshot() {
   const roomList = [];
   for (const room of rooms.values()) {
     const curIdx = room.currentPlayerIndex;
+    const ageSec = room.createdAt ? Math.round((Date.now() - room.createdAt) / 1000) : null;
     roomList.push({
       id: room.id,
       status: room.status,
@@ -78,6 +79,7 @@ function buildAdminSnapshot() {
       isMatchmaking: !!room.isMatchmaking,
       currentTotal: room.currentTotal ?? null,
       currentPlayerName: (room.status === 'playing' && room.players[curIdx]) ? room.players[curIdx].name : null,
+      ageSec,
       players: room.players.map((p, i) => ({
         name: p.name,
         isBot: !!p.isBot,
@@ -87,6 +89,7 @@ function buildAdminSnapshot() {
       })),
     });
   }
+  const mem = process.memoryUsage();
   return {
     timestamp: new Date().toISOString(),
     server: {
@@ -94,6 +97,8 @@ function buildAdminSnapshot() {
       connectedSockets: io.engine.clientsCount,
       totalRooms: rooms.size,
       matchQueueCount: matchQueue.length,
+      memoryRssMB: Math.round(mem.rss / 1024 / 1024),
+      memoryHeapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
     },
     summary,
     matchQueue: matchQueue.map(p => ({ name: p.name, uuidPrefix: p.uuid ? p.uuid.slice(0, 8) : null })),
@@ -112,13 +117,21 @@ function escapeHtml(s) {
 function renderAdminHtml(snapshot, token) {
   const { server: srv, summary, matchQueue: queue, rooms: roomList, players, bannedList, auditTail } = snapshot;
   const tokenEnc = encodeURIComponent(token);
+  const fmtAge = (sec) => {
+    if (sec == null) return '-';
+    if (sec < 60) return sec + 's';
+    if (sec < 3600) return Math.floor(sec / 60) + 'm' + (sec % 60 > 0 ? ' ' + (sec % 60) + 's' : '');
+    return Math.floor(sec / 3600) + 'h ' + Math.floor((sec % 3600) / 60) + 'm';
+  };
   const roomRows = roomList.map(r => `
     <tr>
       <td>${escapeHtml(r.id)}</td>
       <td>${escapeHtml(r.status)}${r.isMatchmaking ? ' <span class="tag">match</span>' : ''}</td>
       <td>${r.roundCount}</td>
       <td>${r.currentTotal ?? '-'}</td>
+      <td>${escapeHtml(fmtAge(r.ageSec))}</td>
       <td>${r.players.map(p => `${p.isCurrent ? '▶ ' : ''}${escapeHtml(p.name)}${p.isBot ? '🤖' : ''}${p.lost ? '💀' : ''}${p.disconnected ? '🔌' : ''}`).join(', ')}</td>
+      <td><button class="act danger" data-action="close-room" data-roomid="${escapeHtml(r.id)}">強制終了</button></td>
     </tr>`).join('');
   const queueRows = queue.length
     ? queue.map(p => `<li>${escapeHtml(p.name)}${p.uuidPrefix ? ` <code>${escapeHtml(p.uuidPrefix)}…</code>` : ''}</li>`).join('')
@@ -179,10 +192,12 @@ function renderAdminHtml(snapshot, token) {
 
 <h2>リアルタイム</h2>
 <div class="stats">
-  <div class="stat"><b>${srv.uptimeSec}s</b>稼働時間</div>
+  <div class="stat"><b>${fmtAge(srv.uptimeSec)}</b>稼働時間</div>
   <div class="stat"><b>${srv.connectedSockets}</b>接続中</div>
   <div class="stat"><b>${srv.totalRooms}</b>ルーム</div>
   <div class="stat"><b>${srv.matchQueueCount}</b>マッチ待機</div>
+  <div class="stat"><b>${srv.memoryRssMB}MB</b>メモリ(RSS)</div>
+  <div class="stat"><b>${srv.memoryHeapUsedMB}MB</b>ヒープ使用</div>
 </div>
 
 <h2>累計・アクティビティ</h2>
@@ -195,7 +210,7 @@ function renderAdminHtml(snapshot, token) {
 
 <h2>進行中ルーム (${roomList.length})</h2>
 ${roomList.length ? `<table>
-<thead><tr><th>ID</th><th>状態</th><th>ラウンド</th><th>合計</th><th>プレイヤー (▶=現在手番)</th></tr></thead>
+<thead><tr><th>ID</th><th>状態</th><th>ラウンド</th><th>合計</th><th>経過</th><th>プレイヤー (▶=現在手番)</th><th>操作</th></tr></thead>
 <tbody>${roomRows}</tbody>
 </table>` : '<p class="dim">ルームなし</p>'}
 
@@ -235,6 +250,21 @@ document.addEventListener('click', async (e) => {
   const btn = e.target.closest('button.act');
   if (!btn) return;
   const action = btn.dataset.action;
+  // ルーム強制終了 (UUID不要、roomId必須)
+  if (action === 'close-room') {
+    const roomId = btn.dataset.roomid;
+    if (!roomId) return;
+    if (!confirm('ルーム ' + roomId + ' を強制終了しますか？ 全プレイヤーがロビーに戻ります')) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch('/admin/close-room?t=' + encodeURIComponent(TOKEN) + '&roomId=' + encodeURIComponent(roomId), { method: 'POST' });
+      const j = await r.json();
+      if (j.success) location.reload();
+      else alert('失敗: ' + (j.error || 'unknown'));
+    } catch (err) { alert('エラー: ' + err); }
+    btn.disabled = false;
+    return;
+  }
   const uuid = btn.dataset.uuid;
   const name = btn.dataset.name || '';
   if (!uuid) return;
@@ -332,6 +362,45 @@ app.post('/admin/ban', (req, res) => {
   logAudit('admin-ban', { uuid: uuid.slice(0, 8), reason });
   res.setHeader('Cache-Control', 'no-store');
   res.json({ success: true, uuid, reason });
+});
+
+// 管理者用: ルーム強制終了
+// POST /admin/close-room?t=<token>&roomId=<id>
+app.post('/admin/close-room', (req, res) => {
+  if (!isAdminRequest(req)) return res.status(404).send('Not Found');
+  const roomId = String(req.query.roomId || '').toUpperCase();
+  const room = rooms.get(roomId);
+  if (!room) return res.status(404).json({ error: 'room not found' });
+  // プレイヤー全員にロビーへ戻る通知
+  for (const p of room.players) {
+    if (!p.isBot && !p.disconnected) {
+      const sock = io.sockets.sockets.get(p.id);
+      if (sock) {
+        if (room.isMatchmaking) {
+          sock.emit('return-to-matchmaking', { playerName: p.name });
+        } else {
+          sock.emit('return-to-lobby');
+        }
+        sock.data.roomId = null;
+      }
+    }
+  }
+  // 関連タイマー解放
+  clearTurnTimer(roomId);
+  if (botTimers.has(roomId)) { clearTimeout(botTimers.get(roomId)); botTimers.delete(roomId); }
+  if (voteTimers.has(roomId)) { clearTimeout(voteTimers.get(roomId)); voteTimers.delete(roomId); }
+  for (const p of room.players) {
+    const timerKey = `${roomId}:${p.name}`;
+    if (disconnectTimers.has(timerKey)) {
+      clearTimeout(disconnectTimers.get(timerKey));
+      disconnectTimers.delete(timerKey);
+    }
+  }
+  rooms.delete(roomId);
+  console.log(`[admin] close-room ${roomId}`);
+  logAudit('admin-close-room', { roomId, players: room.players.map(p => p.name) });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ success: true, roomId });
 });
 
 // 管理者用: BAN解除
@@ -700,6 +769,7 @@ function startMatchCountdown() {
       });
       const room = {
         id: roomId, hostId: matched[0].id, status: 'playing',
+        createdAt: Date.now(),
         ...gameState, votes: {}, roundCount: 1,
         isMatchmaking: true, uuidMap, cumulativeStats, voteDeadline: null,
       };
@@ -914,6 +984,7 @@ io.on('connection', (socket) => {
       id: roomId,
       hostId: socket.id,
       status: 'waiting',
+      createdAt: Date.now(),
       players: [{ id: socket.id, name, hand: [], lost: false, disconnected: false }],
       deck: [], discardPile: [],
       currentTotal: 0, currentPlayerIndex: 0, direction: 1,
