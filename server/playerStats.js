@@ -37,6 +37,27 @@ db.exec(`
     banned_at TEXT NOT NULL,
     last_name TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS card_usage (
+    rank TEXT PRIMARY KEY,
+    plays INTEGER NOT NULL DEFAULT 0,
+    hit_101 INTEGER NOT NULL DEFAULT 0,
+    burst INTEGER NOT NULL DEFAULT 0,
+    joker_100 INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS hourly_activity (
+    hour TEXT PRIMARY KEY,
+    game_starts INTEGER NOT NULL DEFAULT 0,
+    card_plays INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS player_type_stats (
+    type TEXT PRIMARY KEY,
+    wins INTEGER NOT NULL DEFAULT 0,
+    bursts INTEGER NOT NULL DEFAULT 0,
+    card_plays INTEGER NOT NULL DEFAULT 0
+  );
 `);
 
 function currentMonth() {
@@ -290,8 +311,92 @@ function getBannedList() {
   return db.prepare('SELECT uuid, reason, banned_at AS bannedAt, last_name AS lastName FROM banned_uuids ORDER BY banned_at DESC').all();
 }
 
+// ─── カード使用統計 ─────────────────────────────────────────
+const upsertCardPlay = db.prepare(`
+  INSERT INTO card_usage (rank, plays, hit_101, burst, joker_100)
+    VALUES (@rank, 1, @hit101, @burst, @joker100)
+  ON CONFLICT(rank) DO UPDATE SET
+    plays = plays + 1,
+    hit_101 = hit_101 + @hit101,
+    burst = burst + @burst,
+    joker_100 = joker_100 + @joker100
+`);
+const upsertHourlyPlay = db.prepare(`
+  INSERT INTO hourly_activity (hour, card_plays, game_starts) VALUES (?, 1, 0)
+  ON CONFLICT(hour) DO UPDATE SET card_plays = card_plays + 1
+`);
+const upsertHourlyStart = db.prepare(`
+  INSERT INTO hourly_activity (hour, card_plays, game_starts) VALUES (?, 0, 1)
+  ON CONFLICT(hour) DO UPDATE SET game_starts = game_starts + 1
+`);
+const upsertTypeStats = db.prepare(`
+  INSERT INTO player_type_stats (type, wins, bursts, card_plays)
+    VALUES (@type, @wins, @bursts, 1)
+  ON CONFLICT(type) DO UPDATE SET
+    wins = wins + @wins,
+    bursts = bursts + @bursts,
+    card_plays = card_plays + 1
+`);
+
+function currentHourUTC() {
+  const d = new Date();
+  return d.toISOString().slice(0, 13); // 'YYYY-MM-DDTHH'
+}
+
+// scenario: '101' | 'joker101' | '102' | null (通常プレイ)
+function recordCardPlay(rank, scenario, isBot) {
+  if (!rank) return;
+  const hit101 = scenario === '101' ? 1 : 0;
+  const burst = scenario === '102' ? 1 : 0;
+  const joker100 = scenario === 'joker101' ? 1 : 0;
+  const wins = (scenario === '101' || scenario === 'joker101') ? 1 : 0;
+  const type = isBot ? 'bot' : 'human';
+  const tx = db.transaction(() => {
+    upsertCardPlay.run({ rank, hit101, burst, joker100 });
+    upsertHourlyPlay.run(currentHourUTC());
+    upsertTypeStats.run({ type, wins, bursts: burst });
+  });
+  tx();
+}
+
+function recordGameStart() {
+  upsertHourlyStart.run(currentHourUTC());
+}
+
+function getCardUsageStats() {
+  return db.prepare(`
+    SELECT rank, plays, hit_101 AS hit101, burst, joker_100 AS joker100
+    FROM card_usage
+    ORDER BY plays DESC
+  `).all();
+}
+
+// 過去 N 時間 (default 24) の 1時間バケットを返す (欠損は0埋め、古い→新しい順)
+function getHourlyActivity(hours = 24) {
+  const now = new Date();
+  now.setUTCMinutes(0, 0, 0);
+  const buckets = [];
+  for (let i = hours - 1; i >= 0; i--) {
+    const d = new Date(now.getTime() - i * 3600_000);
+    const hour = d.toISOString().slice(0, 13);
+    const row = db.prepare('SELECT game_starts AS gameStarts, card_plays AS cardPlays FROM hourly_activity WHERE hour = ?').get(hour);
+    buckets.push({ hour, gameStarts: row ? row.gameStarts : 0, cardPlays: row ? row.cardPlays : 0 });
+  }
+  return buckets;
+}
+
+function getTypeStats() {
+  const rows = db.prepare('SELECT type, wins, bursts, card_plays AS cardPlays FROM player_type_stats').all();
+  const byType = { bot: { wins: 0, bursts: 0, cardPlays: 0 }, human: { wins: 0, bursts: 0, cardPlays: 0 } };
+  for (const r of rows) {
+    if (byType[r.type]) byType[r.type] = { wins: r.wins, bursts: r.bursts, cardPlays: r.cardPlays };
+  }
+  return byType;
+}
+
 module.exports = {
   getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard,
   getAllStats, resetAllStats, getSummaryStats, resetPlayerStats,
   banUUID, unbanUUID, isBanned, getBannedList,
+  recordCardPlay, recordGameStart, getCardUsageStats, getHourlyActivity, getTypeStats,
 };

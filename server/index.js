@@ -6,6 +6,7 @@ const {
   getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard,
   getAllStats, resetAllStats, getSummaryStats, resetPlayerStats,
   banUUID, unbanUUID, isBanned, getBannedList,
+  recordCardPlay, recordGameStart, getCardUsageStats, getHourlyActivity, getTypeStats,
 } = require('./playerStats');
 const { decideBotMove, decideDrawnCardChoice } = require('./botAi');
 const { logAudit, isSuspiciousBurst, recordAction, clearAction } = require('./audit');
@@ -68,6 +69,9 @@ function buildAdminSnapshot() {
   const summary = getSummaryStats();
   const auditTail = readAuditTail(30);
   const bannedList = getBannedList();
+  const cardUsage = getCardUsageStats();
+  const hourly = getHourlyActivity(24);
+  const typeStats = getTypeStats();
   const roomList = [];
   for (const room of rooms.values()) {
     const curIdx = room.currentPlayerIndex;
@@ -105,6 +109,9 @@ function buildAdminSnapshot() {
     rooms: roomList,
     players: playerList,
     bannedList,
+    cardUsage,
+    hourly,
+    typeStats,
     auditTail,
   };
 }
@@ -115,7 +122,7 @@ function escapeHtml(s) {
 }
 
 function renderAdminHtml(snapshot, token) {
-  const { server: srv, summary, matchQueue: queue, rooms: roomList, players, bannedList, auditTail } = snapshot;
+  const { server: srv, summary, matchQueue: queue, rooms: roomList, players, bannedList, cardUsage, hourly, typeStats, auditTail } = snapshot;
   const tokenEnc = encodeURIComponent(token);
   const fmtAge = (sec) => {
     if (sec == null) return '-';
@@ -185,6 +192,11 @@ function renderAdminHtml(snapshot, token) {
   button.act:hover { background: #64748b; }
   button.act.danger { background: #991b1b; }
   button.act.danger:hover { background: #b91c1c; }
+  .hourly { display: flex; gap: 2px; align-items: flex-end; background: #1e293b; padding: 10px; border-radius: 6px; height: 120px; }
+  .hourly .bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; position: relative; height: 100%; font-size: 9px; color: #94a3b8; }
+  .hourly .bar .fill { width: 100%; background: linear-gradient(180deg, #facc15, #eab308); border-radius: 2px 2px 0 0; min-height: 1px; transition: height 0.3s; }
+  .hourly .bar .lbl { position: absolute; bottom: 18px; font-size: 9px; color: #e2e8f0; }
+  .hourly .bar .hr { margin-top: 2px; font-size: 9px; }
 </style>
 </head><body>
 <h1>🎴 Hit101 管理ダッシュボード</h1>
@@ -228,6 +240,57 @@ ${bannedList.length ? `<table>
 <thead><tr><th>UUID</th><th>最終名</th><th>理由</th><th>BAN日時</th><th>操作</th></tr></thead>
 <tbody>${bannedRows}</tbody>
 </table>` : '<p class="dim">BANされたアカウントなし</p>'}
+
+<h2>カード使用統計</h2>
+${cardUsage.length ? `<table>
+<thead><tr><th>ランク</th><th>使用回数</th><th>101達成</th><th>バースト</th><th>Joker100</th><th>101率</th><th>バースト率</th></tr></thead>
+<tbody>${cardUsage.map(c => {
+    const hit101Rate = c.plays > 0 ? ((c.hit101 + c.joker100) / c.plays * 100).toFixed(1) : '0.0';
+    const burstRate = c.plays > 0 ? (c.burst / c.plays * 100).toFixed(1) : '0.0';
+    return `<tr>
+      <td><code>${escapeHtml(c.rank)}</code></td>
+      <td>${c.plays}</td>
+      <td>${c.hit101}</td>
+      <td>${c.burst}</td>
+      <td>${c.joker100}</td>
+      <td>${hit101Rate}%</td>
+      <td>${burstRate}%</td>
+    </tr>`;
+  }).join('')}</tbody>
+</table>` : '<p class="dim">データなし</p>'}
+
+<h2>Bot vs 人間 統計</h2>
+<table>
+<thead><tr><th>種別</th><th>カード使用</th><th>101/Joker勝ち</th><th>バースト</th><th>勝率</th><th>バースト率</th></tr></thead>
+<tbody>${['human', 'bot'].map(t => {
+    const s = typeStats[t] || { wins: 0, bursts: 0, cardPlays: 0 };
+    const winRate = s.cardPlays > 0 ? (s.wins / s.cardPlays * 100).toFixed(1) : '0.0';
+    const burstRate = s.cardPlays > 0 ? (s.bursts / s.cardPlays * 100).toFixed(1) : '0.0';
+    return `<tr>
+      <td>${t === 'bot' ? '🤖 Bot' : '👤 人間'}</td>
+      <td>${s.cardPlays}</td>
+      <td>${s.wins}</td>
+      <td>${s.bursts}</td>
+      <td>${winRate}%</td>
+      <td>${burstRate}%</td>
+    </tr>`;
+  }).join('')}</tbody>
+</table>
+
+<h2>時間帯別アクティビティ (過去24h UTC)</h2>
+<div class="hourly">${(() => {
+    const maxPlays = Math.max(1, ...hourly.map(h => h.cardPlays));
+    return hourly.map(h => {
+      const heightPct = (h.cardPlays / maxPlays * 100).toFixed(0);
+      const label = h.hour.slice(11); // 'HH'
+      const title = `${h.hour} — ${h.cardPlays}プレイ / ${h.gameStarts}ゲーム開始`;
+      return `<div class="bar" title="${escapeHtml(title)}">
+        <div class="fill" style="height:${heightPct}%"></div>
+        <span class="lbl">${h.cardPlays || ''}</span>
+        <span class="hr">${label}</span>
+      </div>`;
+    }).join('');
+  })()}</div>
 
 <h2>監査ログ (最新${auditTail.length}件)</h2>
 ${auditTail.length ? `<table>
@@ -581,6 +644,16 @@ function broadcastToRoom(room) {
   scheduleBotVotesIfNeeded(room);
 }
 
+// 直近にプレイされたカード1枚を統計に記録 (処理の直後に呼ぶ)
+function trackLastCardPlay(room) {
+  if (!room || !room.lastPlayedCard) return;
+  const card = room.lastPlayedCard;
+  const player = room.players.find(p => p.name === card.playerName);
+  if (!player) return;
+  const scenario = card.scenario || null; // endRound時に設定される
+  try { recordCardPlay(card.rank, scenario, !!player.isBot); } catch (err) { console.error('[stats] recordCardPlay:', err); }
+}
+
 // ─── ターンタイマー ─────────────────────────────────────────
 function clearTurnTimer(roomId) {
   const t = turnTimers.get(roomId);
@@ -640,7 +713,7 @@ function autoDrawOnTimeout(room) {
         }
       }
     }
-    applyRoundEndStats(room);
+    trackLastCardPlay(room); applyRoundEndStats(room);
     room.turnDeadline = null;
     room.turnPlayerId = null;
     broadcastToRoom(room);
@@ -704,7 +777,7 @@ function doBotTurn(roomId) {
         }
       }
     }
-    applyRoundEndStats(room);
+    trackLastCardPlay(room); applyRoundEndStats(room);
     broadcastToRoom(room);
   } catch (err) {
     console.error(`[bot] エラー(${roomId}):`, err);
@@ -783,6 +856,7 @@ function startMatchCountdown() {
         sock.data.inMatchmaking = false;
         io.to(p.id).emit('matchmaking-matched', { roomId, state: publicState(room, p.id) });
       });
+      try { recordGameStart(); } catch (err) { console.error('[stats] recordGameStart:', err); }
       console.log(`マッチング成立 (手動開始): ${roomId}`);
     }
   }, matchCountdownSeconds * 1000);
@@ -1227,6 +1301,7 @@ io.on('connection', (socket) => {
 
     const gameState = createGame(room.players);
     Object.assign(room, gameState, { status: 'playing' });
+    try { recordGameStart(); } catch (err) { console.error('[stats] recordGameStart:', err); }
     broadcastToRoom(room);
     cb?.({ success: true });
   });
@@ -1277,7 +1352,7 @@ io.on('connection', (socket) => {
       logAudit('play-invalid', { socketId: socket.id, uuid: socket.data?.matchUUID, roomId, cardId, choice, error: result.error });
       return cb?.({ success: false, error: result.error });
     }
-    applyRoundEndStats(room);
+    trackLastCardPlay(room); applyRoundEndStats(room);
     broadcastToRoom(room);
     cb?.({ success: true });
   });
@@ -1299,7 +1374,7 @@ io.on('connection', (socket) => {
     if (!result.needsChoice) {
       const playResult = processDrawAndPlay(room, socket.id, null);
       if (!playResult.success) return cb?.({ success: false, error: playResult.error });
-      applyRoundEndStats(room);
+      trackLastCardPlay(room); applyRoundEndStats(room);
     }
 
     broadcastToRoom(room);
@@ -1316,7 +1391,7 @@ io.on('connection', (socket) => {
       logAudit('play-drawn-invalid', { socketId: socket.id, uuid: socket.data?.matchUUID, roomId, choice, error: result.error });
       return cb?.({ success: false, error: result.error });
     }
-    applyRoundEndStats(room);
+    trackLastCardPlay(room); applyRoundEndStats(room);
     broadcastToRoom(room);
     cb?.({ success: true });
   });
