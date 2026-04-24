@@ -277,6 +277,7 @@ function startMatchCountdown() {
   cancelMatchCountdown(); // 既存タイマーを必ずリセットしてから新規開始
   matchCountdownStartTime = Date.now();
   matchCountdownSeconds = getCountdownSecondsForQueue(matchQueue.length);
+  console.log(`[countdown] 開始 queue=${matchQueue.length} seconds=${matchCountdownSeconds}`);
   broadcastMatchmakingState();
   matchCountdownTimer = setTimeout(() => {
     matchCountdownTimer = null;
