@@ -83,7 +83,7 @@ function PrivacyBody() {
 
       <Section title="7. お問い合わせ">
         <p>本ポリシーに関するお問い合わせは以下までお願いします。</p>
-        <p className="text-yellow-300 break-all">xufangxiyin@gmail.com</p>
+        <p className="text-yellow-300 break-all">hit101cards@gmail.com</p>
       </Section>
 
       <Section title="8. 改定">
@@ -147,7 +147,7 @@ function TermsBody() {
       </Section>
 
       <Section title="9. お問い合わせ">
-        <p className="text-yellow-300 break-all">xufangxiyin@gmail.com</p>
+        <p className="text-yellow-300 break-all">hit101cards@gmail.com</p>
       </Section>
     </>
   );
