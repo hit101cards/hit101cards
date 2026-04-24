@@ -2,7 +2,7 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const { createGame, startNewRound, processPlayCard, drawFromDeck, processDrawAndPlay } = require('./gameLogic');
-const { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard, getAllStats, resetAllStats } = require('./playerStats');
+const { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard, getAllStats, resetAllStats, getSummaryStats } = require('./playerStats');
 const { decideBotMove, decideDrawnCardChoice } = require('./botAi');
 const { logAudit, isSuspiciousBurst, recordAction, clearAction } = require('./audit');
 
@@ -36,8 +36,33 @@ function isAdminRequest(req) {
   return diff === 0;
 }
 
+function readAuditTail(maxLines = 30) {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const dataDir = process.env.DATA_DIR || __dirname;
+    const logFile = process.env.AUDIT_LOG_PATH || path.join(dataDir, 'audit.log');
+    if (!fs.existsSync(logFile)) return [];
+    const stat = fs.statSync(logFile);
+    // 末尾のみ読む: 最大64KBまで (軽量化)
+    const readSize = Math.min(stat.size, 64 * 1024);
+    const fd = fs.openSync(logFile, 'r');
+    const buf = Buffer.alloc(readSize);
+    fs.readSync(fd, buf, 0, readSize, Math.max(0, stat.size - readSize));
+    fs.closeSync(fd);
+    const lines = buf.toString('utf-8').split('\n').filter(Boolean);
+    return lines.slice(-maxLines).reverse().map(l => {
+      try { return JSON.parse(l); } catch { return { ts: null, raw: l }; }
+    });
+  } catch (err) {
+    return [{ error: String(err) }];
+  }
+}
+
 function buildAdminSnapshot() {
   const playerList = getAllStats();
+  const summary = getSummaryStats();
+  const auditTail = readAuditTail(30);
   const roomList = [];
   for (const room of rooms.values()) {
     const curIdx = room.currentPlayerIndex;
@@ -65,9 +90,11 @@ function buildAdminSnapshot() {
       totalRooms: rooms.size,
       matchQueueCount: matchQueue.length,
     },
+    summary,
     matchQueue: matchQueue.map(p => ({ name: p.name, uuidPrefix: p.uuid ? p.uuid.slice(0, 8) : null })),
     rooms: roomList,
     players: playerList,
+    auditTail,
   };
 }
 
@@ -77,7 +104,7 @@ function escapeHtml(s) {
 }
 
 function renderAdminHtml(snapshot, token) {
-  const { server: srv, matchQueue: queue, rooms: roomList, players } = snapshot;
+  const { server: srv, summary, matchQueue: queue, rooms: roomList, players, auditTail } = snapshot;
   const tokenEnc = encodeURIComponent(token);
   const roomRows = roomList.map(r => `
     <tr>
@@ -126,11 +153,20 @@ function renderAdminHtml(snapshot, token) {
 <h1>🎴 Hit101 管理ダッシュボード</h1>
 <p class="sub">更新: ${escapeHtml(snapshot.timestamp)} · 10秒ごと自動更新</p>
 
+<h2>リアルタイム</h2>
 <div class="stats">
   <div class="stat"><b>${srv.uptimeSec}s</b>稼働時間</div>
   <div class="stat"><b>${srv.connectedSockets}</b>接続中</div>
   <div class="stat"><b>${srv.totalRooms}</b>ルーム</div>
   <div class="stat"><b>${srv.matchQueueCount}</b>マッチ待機</div>
+</div>
+
+<h2>累計・アクティビティ</h2>
+<div class="stats">
+  <div class="stat"><b>${summary.totalPlayers}</b>登録プレイヤー</div>
+  <div class="stat"><b>${summary.active1d}</b>24h アクティブ</div>
+  <div class="stat"><b>${summary.active7d}</b>7日 アクティブ</div>
+  <div class="stat"><b>${summary.totalPlayerGames}</b>総プレイヤー試合数</div>
 </div>
 
 <h2>進行中ルーム (${roomList.length})</h2>
@@ -147,6 +183,21 @@ ${roomList.length ? `<table>
 <thead><tr><th>#</th><th>名前</th><th>UUID</th><th>累計pt</th><th>試合数</th><th>最終プレイ</th></tr></thead>
 <tbody>${playerRows || '<tr><td colspan="6" class="dim">データなし</td></tr>'}</tbody>
 </table>
+
+<h2>監査ログ (最新${auditTail.length}件)</h2>
+${auditTail.length ? `<table>
+<thead><tr><th>時刻</th><th>種別</th><th>詳細</th></tr></thead>
+<tbody>${auditTail.map(e => {
+    if (e.error) return `<tr><td colspan="3" class="dim">読み込みエラー: ${escapeHtml(e.error)}</td></tr>`;
+    if (e.raw) return `<tr><td class="dim">-</td><td class="dim">-</td><td class="dim">${escapeHtml(e.raw)}</td></tr>`;
+    const ts = e.ts ? String(e.ts).slice(0, 19).replace('T', ' ') : '-';
+    const type = e.type || '-';
+    const rest = { ...e };
+    delete rest.ts; delete rest.type;
+    const detail = Object.entries(rest).map(([k, v]) => `<code>${escapeHtml(k)}</code>=${escapeHtml(typeof v === 'object' ? JSON.stringify(v) : String(v))}`).join(' ');
+    return `<tr><td>${escapeHtml(ts)}</td><td><code>${escapeHtml(type)}</code></td><td>${detail}</td></tr>`;
+  }).join('')}</tbody>
+</table>` : '<p class="dim">ログなし</p>'}
 </body></html>`;
 }
 

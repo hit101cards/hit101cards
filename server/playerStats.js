@@ -207,6 +207,28 @@ function getLeaderboard(opts = {}) {
   return { entries, top: entries, total, limit, offset, myEntry, period: 'all' };
 }
 
+// 管理者用: サマリー指標 (総ゲーム数、アクティブプレイヤー数)
+function getSummaryStats() {
+  const totals = db.prepare(`
+    SELECT
+      COUNT(*) AS totalPlayers,
+      COALESCE(SUM(games_played), 0) AS totalPlayerGames,
+      COALESCE(SUM(total_points), 0) AS totalPointsSum
+    FROM player_stats
+  `).get();
+  const cutoff1d = new Date(Date.now() - 86400_000).toISOString();
+  const cutoff7d = new Date(Date.now() - 7 * 86400_000).toISOString();
+  const active1d = db.prepare('SELECT COUNT(*) AS c FROM player_stats WHERE last_seen >= ?').get(cutoff1d).c;
+  const active7d = db.prepare('SELECT COUNT(*) AS c FROM player_stats WHERE last_seen >= ?').get(cutoff7d).c;
+  return {
+    totalPlayers: totals.totalPlayers,
+    totalPlayerGames: totals.totalPlayerGames,
+    totalPointsSum: totals.totalPointsSum,
+    active1d,
+    active7d,
+  };
+}
+
 // 管理者用: 全プレイヤーの統計を返す (フィルタなし、降順)
 function getAllStats() {
   return db.prepare(`
@@ -231,4 +253,4 @@ function resetAllStats(mode = 'all') {
   return tx();
 }
 
-module.exports = { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard, getAllStats, resetAllStats };
+module.exports = { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard, getAllStats, resetAllStats, getSummaryStats };
