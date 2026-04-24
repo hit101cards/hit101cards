@@ -30,6 +30,13 @@ db.exec(`
     PRIMARY KEY (uuid, month)
   );
   CREATE INDEX IF NOT EXISTS idx_monthly_rank ON monthly_stats(month, total_points DESC);
+
+  CREATE TABLE IF NOT EXISTS banned_uuids (
+    uuid TEXT PRIMARY KEY,
+    reason TEXT,
+    banned_at TEXT NOT NULL,
+    last_name TEXT
+  );
 `);
 
 function currentMonth() {
@@ -253,4 +260,38 @@ function resetAllStats(mode = 'all') {
   return tx();
 }
 
-module.exports = { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard, getAllStats, resetAllStats, getSummaryStats };
+// 管理者用: 特定プレイヤーの統計のみリセット
+function resetPlayerStats(uuid) {
+  if (!uuid) return { totalDeleted: 0, monthlyDeleted: 0 };
+  const tx = db.transaction(() => {
+    const totalDeleted = db.prepare('DELETE FROM player_stats WHERE uuid = ?').run(uuid).changes;
+    const monthlyDeleted = db.prepare('DELETE FROM monthly_stats WHERE uuid = ?').run(uuid).changes;
+    return { totalDeleted, monthlyDeleted };
+  });
+  return tx();
+}
+
+// 管理者用: BAN 追加・削除・確認
+function banUUID(uuid, reason, lastName) {
+  if (!uuid) return false;
+  db.prepare(`INSERT OR REPLACE INTO banned_uuids (uuid, reason, banned_at, last_name) VALUES (?, ?, ?, ?)`)
+    .run(uuid, reason || null, new Date().toISOString(), lastName || null);
+  return true;
+}
+function unbanUUID(uuid) {
+  if (!uuid) return 0;
+  return db.prepare('DELETE FROM banned_uuids WHERE uuid = ?').run(uuid).changes;
+}
+function isBanned(uuid) {
+  if (!uuid) return false;
+  return !!db.prepare('SELECT uuid FROM banned_uuids WHERE uuid = ?').get(uuid);
+}
+function getBannedList() {
+  return db.prepare('SELECT uuid, reason, banned_at AS bannedAt, last_name AS lastName FROM banned_uuids ORDER BY banned_at DESC').all();
+}
+
+module.exports = {
+  getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard,
+  getAllStats, resetAllStats, getSummaryStats, resetPlayerStats,
+  banUUID, unbanUUID, isBanned, getBannedList,
+};

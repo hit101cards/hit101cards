@@ -2,7 +2,11 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const { createGame, startNewRound, processPlayCard, drawFromDeck, processDrawAndPlay } = require('./gameLogic');
-const { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard, getAllStats, resetAllStats, getSummaryStats } = require('./playerStats');
+const {
+  getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard,
+  getAllStats, resetAllStats, getSummaryStats, resetPlayerStats,
+  banUUID, unbanUUID, isBanned, getBannedList,
+} = require('./playerStats');
 const { decideBotMove, decideDrawnCardChoice } = require('./botAi');
 const { logAudit, isSuspiciousBurst, recordAction, clearAction } = require('./audit');
 
@@ -63,6 +67,7 @@ function buildAdminSnapshot() {
   const playerList = getAllStats();
   const summary = getSummaryStats();
   const auditTail = readAuditTail(30);
+  const bannedList = getBannedList();
   const roomList = [];
   for (const room of rooms.values()) {
     const curIdx = room.currentPlayerIndex;
@@ -94,6 +99,7 @@ function buildAdminSnapshot() {
     matchQueue: matchQueue.map(p => ({ name: p.name, uuidPrefix: p.uuid ? p.uuid.slice(0, 8) : null })),
     rooms: roomList,
     players: playerList,
+    bannedList,
     auditTail,
   };
 }
@@ -104,7 +110,7 @@ function escapeHtml(s) {
 }
 
 function renderAdminHtml(snapshot, token) {
-  const { server: srv, summary, matchQueue: queue, rooms: roomList, players, auditTail } = snapshot;
+  const { server: srv, summary, matchQueue: queue, rooms: roomList, players, bannedList, auditTail } = snapshot;
   const tokenEnc = encodeURIComponent(token);
   const roomRows = roomList.map(r => `
     <tr>
@@ -125,6 +131,20 @@ function renderAdminHtml(snapshot, token) {
       <td>${p.totalPoints >= 0 ? '+' : ''}${p.totalPoints}</td>
       <td>${p.gamesPlayed}</td>
       <td>${p.lastSeen ? escapeHtml(p.lastSeen).slice(0, 19).replace('T', ' ') : '-'}</td>
+      <td>
+        <button class="act" data-action="reset-player" data-uuid="${escapeHtml(p.uuid || '')}" data-name="${escapeHtml(p.name)}">リセット</button>
+        <button class="act danger" data-action="ban" data-uuid="${escapeHtml(p.uuid || '')}" data-name="${escapeHtml(p.name)}">BAN</button>
+      </td>
+    </tr>`).join('');
+  const bannedRows = bannedList.map(b => `
+    <tr>
+      <td><code>${escapeHtml((b.uuid || '').slice(0, 8))}…</code></td>
+      <td>${escapeHtml(b.lastName || '-')}</td>
+      <td>${escapeHtml(b.reason || '-')}</td>
+      <td>${b.bannedAt ? escapeHtml(b.bannedAt).slice(0, 19).replace('T', ' ') : '-'}</td>
+      <td>
+        <button class="act" data-action="unban" data-uuid="${escapeHtml(b.uuid || '')}">解除</button>
+      </td>
     </tr>`).join('');
   return `<!DOCTYPE html>
 <html lang="ja"><head>
@@ -148,6 +168,10 @@ function renderAdminHtml(snapshot, token) {
   .tag { background: #7c3aed; color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 10px; }
   .dim { color: #64748b; }
   ul { margin: 4px 0; padding-left: 20px; }
+  button.act { background: #475569; color: #e2e8f0; border: none; padding: 3px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; margin: 0 2px; }
+  button.act:hover { background: #64748b; }
+  button.act.danger { background: #991b1b; }
+  button.act.danger:hover { background: #b91c1c; }
 </style>
 </head><body>
 <h1>🎴 Hit101 管理ダッシュボード</h1>
@@ -180,9 +204,15 @@ ${roomList.length ? `<table>
 
 <h2>全プレイヤーランキング (${players.length})</h2>
 <table>
-<thead><tr><th>#</th><th>名前</th><th>UUID</th><th>累計pt</th><th>試合数</th><th>最終プレイ</th></tr></thead>
-<tbody>${playerRows || '<tr><td colspan="6" class="dim">データなし</td></tr>'}</tbody>
+<thead><tr><th>#</th><th>名前</th><th>UUID</th><th>累計pt</th><th>試合数</th><th>最終プレイ</th><th>操作</th></tr></thead>
+<tbody>${playerRows || '<tr><td colspan="7" class="dim">データなし</td></tr>'}</tbody>
 </table>
+
+<h2>BAN中 (${bannedList.length})</h2>
+${bannedList.length ? `<table>
+<thead><tr><th>UUID</th><th>最終名</th><th>理由</th><th>BAN日時</th><th>操作</th></tr></thead>
+<tbody>${bannedRows}</tbody>
+</table>` : '<p class="dim">BANされたアカウントなし</p>'}
 
 <h2>監査ログ (最新${auditTail.length}件)</h2>
 ${auditTail.length ? `<table>
@@ -198,6 +228,45 @@ ${auditTail.length ? `<table>
     return `<tr><td>${escapeHtml(ts)}</td><td><code>${escapeHtml(type)}</code></td><td>${detail}</td></tr>`;
   }).join('')}</tbody>
 </table>` : '<p class="dim">ログなし</p>'}
+
+<script>
+const TOKEN = ${JSON.stringify(token)};
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button.act');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  const uuid = btn.dataset.uuid;
+  const name = btn.dataset.name || '';
+  if (!uuid) return;
+  let endpoint, msg;
+  if (action === 'reset-player') { endpoint = '/admin/reset-player'; msg = name + ' の統計をリセットしますか？'; }
+  else if (action === 'ban') {
+    endpoint = '/admin/ban';
+    const reason = prompt(name + ' をBANします。理由（任意）:');
+    if (reason === null) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch(endpoint + '?t=' + encodeURIComponent(TOKEN) + '&uuid=' + encodeURIComponent(uuid) + '&reason=' + encodeURIComponent(reason || ''), { method: 'POST' });
+      const j = await r.json();
+      if (j.success) location.reload();
+      else alert('失敗: ' + (j.error || 'unknown'));
+    } catch (err) { alert('エラー: ' + err); }
+    btn.disabled = false;
+    return;
+  }
+  else if (action === 'unban') { endpoint = '/admin/unban'; msg = 'このアカウントのBANを解除しますか？'; }
+  else return;
+  if (!confirm(msg)) return;
+  btn.disabled = true;
+  try {
+    const r = await fetch(endpoint + '?t=' + encodeURIComponent(TOKEN) + '&uuid=' + encodeURIComponent(uuid), { method: 'POST' });
+    const j = await r.json();
+    if (j.success) location.reload();
+    else alert('失敗: ' + (j.error || 'unknown'));
+  } catch (err) { alert('エラー: ' + err); }
+  btn.disabled = false;
+});
+</script>
 </body></html>`;
 }
 
@@ -228,6 +297,54 @@ app.post('/admin/reset', express.json({ limit: '1kb' }), (req, res) => {
   logAudit('admin-reset', { mode, ...result });
   res.setHeader('Cache-Control', 'no-store');
   res.json({ success: true, mode, ...result });
+});
+
+// 管理者用: 個別プレイヤー統計リセット
+// POST /admin/reset-player?t=<token>&uuid=<uuid>
+app.post('/admin/reset-player', (req, res) => {
+  if (!isAdminRequest(req)) return res.status(404).send('Not Found');
+  const uuid = String(req.query.uuid || '');
+  if (!isValidUUID(uuid)) return res.status(400).json({ error: 'invalid uuid' });
+  const result = resetPlayerStats(uuid);
+  console.log(`[admin] reset-player uuid=${uuid.slice(0, 8)} total=${result.totalDeleted} monthly=${result.monthlyDeleted}`);
+  logAudit('admin-reset-player', { uuid: uuid.slice(0, 8), ...result });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ success: true, uuid, ...result });
+});
+
+// 管理者用: BAN
+// POST /admin/ban?t=<token>&uuid=<uuid>&reason=<reason>
+app.post('/admin/ban', (req, res) => {
+  if (!isAdminRequest(req)) return res.status(404).send('Not Found');
+  const uuid = String(req.query.uuid || '');
+  if (!isValidUUID(uuid)) return res.status(400).json({ error: 'invalid uuid' });
+  const reason = String(req.query.reason || '').slice(0, 200);
+  const existing = getStats(uuid);
+  banUUID(uuid, reason || null, existing?.name || null);
+  // 進行中の接続があれば切断
+  for (const [sid, sock] of io.sockets.sockets) {
+    if (sock.data?.matchUUID === uuid || sock.data?.uuid === uuid) {
+      sock.disconnect(true);
+      console.log(`[admin] banned active socket ${sid}`);
+    }
+  }
+  console.log(`[admin] ban uuid=${uuid.slice(0, 8)} reason="${reason}"`);
+  logAudit('admin-ban', { uuid: uuid.slice(0, 8), reason });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ success: true, uuid, reason });
+});
+
+// 管理者用: BAN解除
+// POST /admin/unban?t=<token>&uuid=<uuid>
+app.post('/admin/unban', (req, res) => {
+  if (!isAdminRequest(req)) return res.status(404).send('Not Found');
+  const uuid = String(req.query.uuid || '');
+  if (!isValidUUID(uuid)) return res.status(400).json({ error: 'invalid uuid' });
+  const removed = unbanUUID(uuid);
+  console.log(`[admin] unban uuid=${uuid.slice(0, 8)} removed=${removed}`);
+  logAudit('admin-unban', { uuid: uuid.slice(0, 8), removed });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ success: true, uuid, removed });
 });
 
 const rooms = new Map();
@@ -786,9 +903,11 @@ function applyRoundEndStats(room) {
 io.on('connection', (socket) => {
   console.log('接続:', socket.id);
 
-  socket.on('create-room', ({ playerName }, cb) => {
+  socket.on('create-room', ({ playerName, uuid }, cb) => {
     const v = validateName(playerName);
     if (!v.ok) return cb({ success: false, error: v.error });
+    if (uuid && !isValidUUID(uuid)) return cb({ success: false, error: '無効なアカウント情報です' });
+    if (uuid && isBanned(uuid)) return cb({ success: false, error: 'このアカウントはご利用いただけません' });
     const name = v.name;
     const roomId = genRoomId();
     const room = {
@@ -809,11 +928,13 @@ io.on('connection', (socket) => {
     cb({ success: true, roomId, state: publicState(room, socket.id) });
   });
 
-  socket.on('join-room', ({ roomId, playerName }, cb) => {
+  socket.on('join-room', ({ roomId, playerName, uuid }, cb) => {
     if (typeof roomId !== 'string' || !/^[A-Z0-9]{4,8}$/i.test(roomId)) return cb({ success: false, error: '無効なルームIDです' });
     roomId = roomId.toUpperCase();
     const v = validateName(playerName);
     if (!v.ok) return cb({ success: false, error: v.error });
+    if (uuid && !isValidUUID(uuid)) return cb({ success: false, error: '無効なアカウント情報です' });
+    if (uuid && isBanned(uuid)) return cb({ success: false, error: 'このアカウントはご利用いただけません' });
     const name = v.name;
     const room = rooms.get(roomId);
     if (!room) return cb({ success: false, error: 'ルームが見つかりません' });
@@ -879,7 +1000,10 @@ io.on('connection', (socket) => {
     // UUID フォーマット検証
     if (uuid && !isValidUUID(uuid)) return cb?.({ success: false, error: '無効なアカウント情報です。ページを再読み込みしてください' });
 
-    // BAN確認
+    // 管理者BAN (永続)
+    if (uuid && isBanned(uuid)) return cb?.({ success: false, error: 'このアカウントはご利用いただけません' });
+
+    // 迷惑行為BAN (一時)
     const banLeft = checkMatchBan(uuid);
     if (banLeft) return cb?.({ success: false, error: `迷惑行為のため${banLeft}秒間マッチングを利用できません` });
 

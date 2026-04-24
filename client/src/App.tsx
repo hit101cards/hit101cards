@@ -226,7 +226,7 @@ export default function App() {
     setActionInProgress(true);
     setError('');
     if (!socket.connected) socket.connect();
-    socket.timeout(5000).emit('create-room', { playerName: name },
+    socket.timeout(5000).emit('create-room', { playerName: name, uuid: MY_UUID },
       (err: Error | null, res: { success: boolean; error?: string; roomId?: string; state?: GameState }) => {
         setActionInProgress(false);
         if (err) { setError('サーバーに接続できませんでした。サーバーが起動しているか確認してください。'); return; }
@@ -247,7 +247,7 @@ export default function App() {
     setActionInProgress(true);
     setError('');
     if (!socket.connected) socket.connect();
-    socket.timeout(5000).emit('join-room', { playerName: name, roomId: rid },
+    socket.timeout(5000).emit('join-room', { playerName: name, roomId: rid, uuid: MY_UUID },
       (err: Error | null, res: { success: boolean; error?: string; roomId?: string; state?: GameState }) => {
         setActionInProgress(false);
         if (err) { setError('サーバーに接続できませんでした。サーバーが起動しているか確認してください。'); return; }
