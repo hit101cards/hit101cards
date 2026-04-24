@@ -216,4 +216,19 @@ function getAllStats() {
   `).all();
 }
 
-module.exports = { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard, getAllStats };
+// 管理者用: 全プレイヤーのポイントと試合数をリセット
+// mode: 'all' (両テーブル削除) | 'monthly' (monthly_stats のみ)
+function resetAllStats(mode = 'all') {
+  const tx = db.transaction(() => {
+    let totalDeleted = 0;
+    let monthlyDeleted = 0;
+    if (mode === 'all') {
+      totalDeleted = db.prepare('DELETE FROM player_stats').run().changes;
+    }
+    monthlyDeleted = db.prepare('DELETE FROM monthly_stats').run().changes;
+    return { totalDeleted, monthlyDeleted };
+  });
+  return tx();
+}
+
+module.exports = { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard, getAllStats, resetAllStats };

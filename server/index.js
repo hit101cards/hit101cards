@@ -2,7 +2,7 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const { createGame, startNewRound, processPlayCard, drawFromDeck, processDrawAndPlay } = require('./gameLogic');
-const { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard, getAllStats } = require('./playerStats');
+const { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard, getAllStats, resetAllStats } = require('./playerStats');
 const { decideBotMove, decideDrawnCardChoice } = require('./botAi');
 const { logAudit, isSuspiciousBurst, recordAction, clearAction } = require('./audit');
 
@@ -160,6 +160,21 @@ app.get('/admin/stats', (req, res) => {
     res.setHeader('X-Robots-Tag', 'noindex, nofollow');
     res.json(snapshot);
   }
+});
+
+// 管理者用: プレイヤー統計リセット
+// POST /admin/reset?t=<token>&confirm=yes&mode=all|monthly
+app.post('/admin/reset', express.json({ limit: '1kb' }), (req, res) => {
+  if (!isAdminRequest(req)) return res.status(404).send('Not Found');
+  if (req.query.confirm !== 'yes') {
+    return res.status(400).json({ error: 'confirm=yes required' });
+  }
+  const mode = req.query.mode === 'monthly' ? 'monthly' : 'all';
+  const result = resetAllStats(mode);
+  console.log(`[admin] stats reset mode=${mode} total=${result.totalDeleted} monthly=${result.monthlyDeleted}`);
+  logAudit('admin-reset', { mode, ...result });
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ success: true, mode, ...result });
 });
 
 const rooms = new Map();
