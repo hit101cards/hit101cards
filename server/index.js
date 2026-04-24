@@ -22,6 +22,7 @@ app.get('/health', (_req, res) => {
 const rooms = new Map();
 const voteTimers = new Map(); // roomId → 投票タイムアウトタイマー
 const botTimers = new Map(); // roomId → Bot ターン遅延タイマー
+const turnTimers = new Map(); // roomId → 人間プレイヤーのターン時間切れタイマー
 const uuidSockets = new Map(); // uuid → Set<socketId> (多重接続検知)
 const matchQueue = []; // マッチメイキング待機キュー
 const matchReady = new Set(); // 準備完了のソケットID
@@ -112,6 +113,7 @@ function handleCountdownAfterLeave() {
 const RECONNECT_TIMEOUT_MS = 60000; // 60秒以内に再接続しないと脱落
 const ROOM_CLEANUP_DELAY_MS = 10 * 60 * 1000; // ゲーム終了から10分後にルーム削除
 const VOTE_TIMEOUT_MS = 30 * 1000; // 最初の投票から30秒でタイムアウト
+const TURN_TIMEOUT_MS = 20 * 1000; // 各ターン20秒で時間切れ → 自動ドロー
 
 // ゲーム終了後のルーム自動削除
 function scheduleRoomCleanup(roomId) {
@@ -131,6 +133,7 @@ function scheduleRoomCleanup(roomId) {
       rooms.delete(roomId);
       if (botTimers.has(roomId)) { clearTimeout(botTimers.get(roomId)); botTimers.delete(roomId); }
       if (voteTimers.has(roomId)) { clearTimeout(voteTimers.get(roomId)); voteTimers.delete(roomId); }
+      clearTurnTimer(roomId);
       console.log(`[cleanup] ルーム削除: ${roomId}`);
     }
   }, ROOM_CLEANUP_DELAY_MS);
@@ -157,6 +160,7 @@ function publicState(room, viewerId) {
     voteDeadline: room.voteDeadline ?? null,
     isMatchmaking: !!room.isMatchmaking,
     cumulativeStats: room.isMatchmaking ? (room.cumulativeStats || {}) : null,
+    turnDeadline: room.turnDeadline ?? null,
     players: room.players.map(p => ({
       id: p.id,
       name: p.name,
@@ -170,6 +174,7 @@ function publicState(room, viewerId) {
 }
 
 function broadcastToRoom(room) {
+  scheduleTurnTimer(room);
   room.players.forEach(p => {
     if (!p.disconnected && !p.isBot) {
       io.to(p.id).emit('game-update', publicState(room, p.id));
@@ -177,6 +182,76 @@ function broadcastToRoom(room) {
   });
   scheduleBotTurnIfNeeded(room);
   scheduleBotVotesIfNeeded(room);
+}
+
+// ─── ターンタイマー ─────────────────────────────────────────
+function clearTurnTimer(roomId) {
+  const t = turnTimers.get(roomId);
+  if (t) {
+    clearTimeout(t);
+    turnTimers.delete(roomId);
+  }
+}
+
+function scheduleTurnTimer(room) {
+  // ゲーム進行中でなければタイマー不要
+  if (room.status !== 'playing') {
+    clearTurnTimer(room.id);
+    room.turnDeadline = null;
+    room.turnPlayerId = null;
+    return;
+  }
+  const current = room.players[room.currentPlayerIndex];
+  // Bot・脱落・切断中はタイマー不要 (Bot は自動プレイ、切断中は別機構で進行)
+  if (!current || current.isBot || current.lost || current.disconnected) {
+    clearTurnTimer(room.id);
+    room.turnDeadline = null;
+    room.turnPlayerId = null;
+    return;
+  }
+  // 同じプレイヤーのターン継続中 (例: カードを引いて選択中) は既存タイマーを維持
+  if (room.turnPlayerId === current.id && turnTimers.has(room.id)) {
+    return;
+  }
+  // 新規 or プレイヤー交代 → 再設定
+  clearTurnTimer(room.id);
+  room.turnPlayerId = current.id;
+  room.turnDeadline = Date.now() + TURN_TIMEOUT_MS;
+  const timer = setTimeout(() => autoDrawOnTimeout(room), TURN_TIMEOUT_MS);
+  turnTimers.set(room.id, timer);
+}
+
+function autoDrawOnTimeout(room) {
+  turnTimers.delete(room.id);
+  if (room.status !== 'playing') return;
+  const player = room.players[room.currentPlayerIndex];
+  if (!player || player.isBot || player.lost || player.disconnected) return;
+
+  try {
+    if (room.pendingDrawnCard) {
+      // すでにカードを引いて選択待ち → スマート選択で確定
+      const choice = decideDrawnCardChoice(room.pendingDrawnCard, room.currentTotal);
+      processDrawAndPlay(room, player.id, choice);
+    } else {
+      const result = drawFromDeck(room, player.id);
+      if (result.success) {
+        if (!result.needsChoice) {
+          processDrawAndPlay(room, player.id, null);
+        } else {
+          const choice = decideDrawnCardChoice(result.card, room.currentTotal);
+          processDrawAndPlay(room, player.id, choice);
+        }
+      }
+    }
+    applyRoundEndStats(room);
+    room.turnDeadline = null;
+    room.turnPlayerId = null;
+    broadcastToRoom(room);
+    logAudit('turn-timeout', { roomId: room.id, playerId: player.id, playerName: player.name });
+    console.log(`[turn-timeout] ${room.id} ${player.name} 自動ドロー`);
+  } catch (err) {
+    console.error(`[turn-timeout] エラー(${room.id}):`, err);
+  }
 }
 
 // ─── Bot ────────────────────────────────────────────────────────

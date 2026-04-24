@@ -80,6 +80,7 @@ export interface GameState {
   points: Record<string, number>;
   votes: Record<string, 'continue' | 'quit' | null>;
   voteDeadline: number | null;
+  turnDeadline: number | null;
   roundResult: RoundResult | null;
   roundCount: number;
   players: Player[];

@@ -125,3 +125,10 @@ export function playCountTick(value: number) {
   const freq = 300 + Math.min(value, 101) * 5;
   playTone(freq, 0.04, 'sine', 0.04);
 }
+
+/** ターン残り時間警告 (5秒以下で毎秒再生) */
+export function playTurnWarning() {
+  if (muted) return;
+  playTone(900, 0.07, 'square', 0.08);
+  setTimeout(() => playTone(700, 0.07, 'square', 0.07), 90);
+}

@@ -3,7 +3,7 @@ import { socket } from '../socket';
 import { GameState, Card, Player, RoundResult } from '../types';
 import CardComponent from './Card';
 import RulesModal from './RulesModal';
-import { playCardSound, playDrawSound, playTurnSound, playHit101Sound, playBustSound, playJokerSound, playSkipSound, playReturnSound, playCountTick, isMuted, toggleMute } from '../sounds';
+import { playCardSound, playDrawSound, playTurnSound, playHit101Sound, playBustSound, playJokerSound, playSkipSound, playReturnSound, playCountTick, playTurnWarning, isMuted, toggleMute } from '../sounds';
 
 function LeaveConfirmModal({ isPlaying, onCancel, onConfirm }: { isPlaying: boolean; onCancel: () => void; onConfirm: () => void }) {
   return (
@@ -343,7 +343,7 @@ function WaitingScreen({ gameState, myId, onStartGame, onLeaveClick }: { gameSta
 }
 
 export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck, onStartGame, onVote, onRestart }: Props) {
-  const { players, currentTotal, currentPlayerIndex, direction, lastPlayedCard, status, deckCount, points, votes, roundResult, roundCount, cumulativeStats } = gameState;
+  const { players, currentTotal, currentPlayerIndex, direction, lastPlayedCard, status, deckCount, points, votes, roundResult, roundCount, cumulativeStats, turnDeadline } = gameState;
 
   const [showRules, setShowRules] = useState(false);
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
@@ -370,6 +370,8 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
   const actionEffectClearRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [displayTotal, setDisplayTotal] = useState<number | null>(null);
   const [roundEndVisible, setRoundEndVisible] = useState(false);
+  const [turnSecsLeft, setTurnSecsLeft] = useState<number | null>(null);
+  const lastWarnSecRef = useRef<number>(-1);
   const countTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const countEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -594,6 +596,27 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
 
   const me = players.find(p => p.id === myId);
   const isMyTurn = players[currentPlayerIndex]?.id === myId && status === 'playing' && !me?.lost;
+
+  // ターン時間カウントダウン表示 + 残り5秒以下で警告音
+  useEffect(() => {
+    if (!turnDeadline || status !== 'playing') {
+      setTurnSecsLeft(null);
+      lastWarnSecRef.current = -1;
+      return;
+    }
+    const tick = () => {
+      const remain = Math.max(0, Math.ceil((turnDeadline - Date.now()) / 1000));
+      setTurnSecsLeft(remain);
+      if (isMyTurn && remain > 0 && remain <= 5 && remain !== lastWarnSecRef.current) {
+        lastWarnSecRef.current = remain;
+        playTurnWarning();
+      }
+      if (remain === 0) clearInterval(id);
+    };
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+  }, [turnDeadline, status, isMyTurn]);
   const currentPlayer = players[currentPlayerIndex];
   const currentPlayerName = currentPlayer?.name || '';
   const isBotTurn = currentPlayer?.isBot && status === 'playing' && !currentPlayer?.lost;
@@ -634,6 +657,20 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
       {notification && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-yellow-500 text-black font-bold px-5 py-2.5 rounded-full shadow-lg text-sm whitespace-nowrap">
           {notification}
+        </div>
+      )}
+
+      {/* ターンタイマー (ターン中のみ表示) */}
+      {turnSecsLeft !== null && status === 'playing' && (
+        <div
+          className={`fixed top-10 left-1/2 -translate-x-1/2 z-40 px-3.5 py-1 rounded-full shadow-md text-xs font-bold whitespace-nowrap flex items-center gap-1.5 ${
+            turnSecsLeft <= 5
+              ? 'bg-red-600 text-white animate-pulse'
+              : isMyTurn ? 'bg-yellow-500 text-black' : 'bg-green-700/80 text-green-100'
+          }`}
+        >
+          <span>⏱</span>
+          <span>{isMyTurn ? 'あなたのターン' : `${currentPlayerName}`} — {turnSecsLeft}s</span>
         </div>
       )}
 
