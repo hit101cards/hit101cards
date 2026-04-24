@@ -27,6 +27,14 @@ const matchQueue = []; // マッチメイキング待機キュー
 const matchReady = new Set(); // 準備完了のソケットID
 let matchCountdownTimer = null;
 let matchCountdownStartTime = null;
+let matchCountdownSeconds = null;
+
+// キュー人数に応じたカウントダウン秒数 (人数が少ないほど長く待って4人目を募る)
+function getCountdownSecondsForQueue(size) {
+  if (size >= MATCH_SIZE) return 5;   // 満員(4人): 即開始感覚
+  if (size === 3) return 10;
+  return 15;                           // 2人: 最長、追加参加の余地を残す
+}
 // 切断タイマー管理: `${roomId}:${playerName}` -> timer
 const disconnectTimers = new Map();
 
@@ -250,6 +258,7 @@ function broadcastMatchmakingState() {
       count: matchQueue.length,
       readyCount: matchReady.size,
       countdownStartedAt: matchCountdownStartTime,
+      countdownSeconds: matchCountdownSeconds,
       players,
     });
   });
@@ -261,15 +270,18 @@ function cancelMatchCountdown() {
     matchCountdownTimer = null;
   }
   matchCountdownStartTime = null; // タイマーの有無に関わらず常にリセット
+  matchCountdownSeconds = null;
 }
 
 function startMatchCountdown() {
   cancelMatchCountdown(); // 既存タイマーを必ずリセットしてから新規開始
   matchCountdownStartTime = Date.now();
+  matchCountdownSeconds = getCountdownSecondsForQueue(matchQueue.length);
   broadcastMatchmakingState();
   matchCountdownTimer = setTimeout(() => {
     matchCountdownTimer = null;
     matchCountdownStartTime = null;
+    matchCountdownSeconds = null;
     if (matchQueue.length >= 2 && matchReady.size >= matchQueue.length) {
       const matched = matchQueue.splice(0, matchQueue.length);
       matchReady.clear();
@@ -299,7 +311,7 @@ function startMatchCountdown() {
       });
       console.log(`マッチング成立 (手動開始): ${roomId}`);
     }
-  }, 5000);
+  }, matchCountdownSeconds * 1000);
 }
 
 // 重複なし gamesPlayed カウント（退出・自動終了・投票終了の全パスで使用）

@@ -60,6 +60,7 @@ export default function App() {
   const [matchReadyCount, setMatchReadyCount] = useState(0);
   const [isReady, setIsReady] = useState(false);
   const [countdownStartedAt, setCountdownStartedAt] = useState<number | null>(null);
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(5);
   const [displayCountdown, setDisplayCountdown] = useState<number | null>(null);
   const [matchPlayers, setMatchPlayers] = useState<MatchmakingPlayer[]>([]);
   const [myStats, setMyStats] = useState<CumulativeStat | null>(null);
@@ -192,10 +193,11 @@ export default function App() {
         }
       });
     });
-    socket.on('matchmaking-update', ({ count, readyCount, countdownStartedAt: csa, players: mqPlayers }: { count: number; readyCount?: number; countdownStartedAt?: number | null; players?: MatchmakingPlayer[] }) => {
+    socket.on('matchmaking-update', ({ count, readyCount, countdownStartedAt: csa, countdownSeconds: cds, players: mqPlayers }: { count: number; readyCount?: number; countdownStartedAt?: number | null; countdownSeconds?: number | null; players?: MatchmakingPlayer[] }) => {
       setMatchCount(count);
       if (readyCount !== undefined) setMatchReadyCount(readyCount);
       setCountdownStartedAt(csa ?? null);
+      if (typeof cds === 'number') setCountdownSeconds(cds);
       if (mqPlayers) setMatchPlayers(mqPlayers);
     });
     socket.on('matchmaking-matched', ({ roomId: rid, state }: { roomId: string; state: GameState }) => {
@@ -286,18 +288,18 @@ export default function App() {
   }, [actionInProgress]);
 
   // カウントダウン表示用タイマー
-  // countdownStartedAt が変わるたびに必ず5秒からカウントし直す
+  // countdownStartedAt が変わるたびに、サーバー指定の秒数からカウントし直す
   useEffect(() => {
     if (countdownStartedAt === null) { setDisplayCountdown(null); return; }
-    setDisplayCountdown(5);
-    let secs = 5;
+    setDisplayCountdown(countdownSeconds);
+    let secs = countdownSeconds;
     const id = setInterval(() => {
       secs = Math.max(0, secs - 1);
       setDisplayCountdown(secs);
       if (secs === 0) clearInterval(id);
     }, 1000);
     return () => clearInterval(id);
-  }, [countdownStartedAt]);
+  }, [countdownStartedAt, countdownSeconds]);
 
   // 合計値カウントアップ/ダウンアニメーション
   useEffect(() => {
