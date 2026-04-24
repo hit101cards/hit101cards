@@ -2,7 +2,7 @@ const express = require('express');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 const { createGame, startNewRound, processPlayCard, drawFromDeck, processDrawAndPlay } = require('./gameLogic');
-const { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard } = require('./playerStats');
+const { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard, getAllStats } = require('./playerStats');
 const { decideBotMove, decideDrawnCardChoice } = require('./botAi');
 const { logAudit, isSuspiciousBurst, recordAction, clearAction } = require('./audit');
 
@@ -17,6 +17,149 @@ const io = new Server(httpServer, {
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime(), rooms: rooms.size, queue: matchQueue.length });
+});
+
+// ─── 管理者用ダッシュボード ───────────────────────────────────────
+// トークン: process.env.ADMIN_TOKEN (未設定時は常に404)
+// 失敗時は 404 を返してエンドポイントの存在自体を隠す
+// ?t=<token> または X-Admin-Token ヘッダで認証
+// ?format=html で HTML テーブル (10秒ごと自動更新) を返す
+function isAdminRequest(req) {
+  const expected = process.env.ADMIN_TOKEN;
+  if (!expected) return false;
+  const provided = req.query.t || req.headers['x-admin-token'];
+  if (!provided) return false;
+  // タイミング攻撃を避けるため長さ一致 + 安全比較
+  if (provided.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= provided.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+
+function buildAdminSnapshot() {
+  const playerList = getAllStats();
+  const roomList = [];
+  for (const room of rooms.values()) {
+    roomList.push({
+      id: room.id,
+      status: room.status,
+      roundCount: room.roundCount || 0,
+      isMatchmaking: !!room.isMatchmaking,
+      currentTotal: room.currentTotal ?? null,
+      players: room.players.map(p => ({
+        name: p.name,
+        isBot: !!p.isBot,
+        lost: !!p.lost,
+        disconnected: !!p.disconnected,
+        handCount: p.hand ? p.hand.length : 0,
+      })),
+    });
+  }
+  return {
+    timestamp: new Date().toISOString(),
+    server: {
+      uptimeSec: Math.round(process.uptime()),
+      connectedSockets: io.engine.clientsCount,
+      totalRooms: rooms.size,
+      matchQueueCount: matchQueue.length,
+    },
+    matchQueue: matchQueue.map(p => ({ name: p.name, uuidPrefix: p.uuid ? p.uuid.slice(0, 8) : null })),
+    rooms: roomList,
+    players: playerList,
+  };
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function renderAdminHtml(snapshot, token) {
+  const { server: srv, matchQueue: queue, rooms: roomList, players } = snapshot;
+  const tokenEnc = encodeURIComponent(token);
+  const roomRows = roomList.map(r => `
+    <tr>
+      <td>${escapeHtml(r.id)}</td>
+      <td>${escapeHtml(r.status)}${r.isMatchmaking ? ' <span class="tag">match</span>' : ''}</td>
+      <td>${r.roundCount}</td>
+      <td>${r.currentTotal ?? '-'}</td>
+      <td>${r.players.map(p => `${escapeHtml(p.name)}${p.isBot ? '🤖' : ''}${p.lost ? '💀' : ''}${p.disconnected ? '🔌' : ''}(${p.handCount})`).join(', ')}</td>
+    </tr>`).join('');
+  const queueRows = queue.length
+    ? queue.map(p => `<li>${escapeHtml(p.name)}${p.uuidPrefix ? ` <code>${escapeHtml(p.uuidPrefix)}…</code>` : ''}</li>`).join('')
+    : '<li class="dim">待機中なし</li>';
+  const playerRows = players.map((p, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${escapeHtml(p.name)}</td>
+      <td><code>${escapeHtml((p.uuid || '').slice(0, 8))}…</code></td>
+      <td>${p.totalPoints >= 0 ? '+' : ''}${p.totalPoints}</td>
+      <td>${p.gamesPlayed}</td>
+      <td>${p.lastSeen ? escapeHtml(p.lastSeen).slice(0, 19).replace('T', ' ') : '-'}</td>
+    </tr>`).join('');
+  return `<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Hit101 Admin</title>
+<meta http-equiv="refresh" content="10;url=/admin/stats?t=${tokenEnc}&format=html">
+<style>
+  body { font-family: -apple-system, "Segoe UI", sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 16px; font-size: 13px; }
+  h1 { color: #facc15; margin: 0 0 4px; font-size: 18px; }
+  h2 { color: #fbbf24; margin: 18px 0 6px; font-size: 14px; border-bottom: 1px solid #334155; padding-bottom: 4px; }
+  .sub { color: #94a3b8; font-size: 11px; margin-bottom: 12px; }
+  .stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+  .stat { background: #1e293b; padding: 8px 12px; border-radius: 6px; }
+  .stat b { color: #facc15; font-size: 16px; display: block; }
+  table { width: 100%; border-collapse: collapse; margin-top: 4px; background: #1e293b; border-radius: 6px; overflow: hidden; }
+  th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #334155; }
+  th { background: #334155; color: #facc15; font-size: 11px; text-transform: uppercase; }
+  tr:last-child td { border-bottom: none; }
+  code { background: #334155; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+  .tag { background: #7c3aed; color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 10px; }
+  .dim { color: #64748b; }
+  ul { margin: 4px 0; padding-left: 20px; }
+</style>
+</head><body>
+<h1>🎴 Hit101 管理ダッシュボード</h1>
+<p class="sub">更新: ${escapeHtml(snapshot.timestamp)} · 10秒ごと自動更新</p>
+
+<div class="stats">
+  <div class="stat"><b>${srv.uptimeSec}s</b>稼働時間</div>
+  <div class="stat"><b>${srv.connectedSockets}</b>接続中</div>
+  <div class="stat"><b>${srv.totalRooms}</b>ルーム</div>
+  <div class="stat"><b>${srv.matchQueueCount}</b>マッチ待機</div>
+</div>
+
+<h2>進行中ルーム (${roomList.length})</h2>
+${roomList.length ? `<table>
+<thead><tr><th>ID</th><th>状態</th><th>ラウンド</th><th>合計</th><th>プレイヤー (手札数)</th></tr></thead>
+<tbody>${roomRows}</tbody>
+</table>` : '<p class="dim">ルームなし</p>'}
+
+<h2>マッチング待機 (${queue.length})</h2>
+<ul>${queueRows}</ul>
+
+<h2>全プレイヤーランキング (${players.length})</h2>
+<table>
+<thead><tr><th>#</th><th>名前</th><th>UUID</th><th>累計pt</th><th>試合数</th><th>最終プレイ</th></tr></thead>
+<tbody>${playerRows || '<tr><td colspan="6" class="dim">データなし</td></tr>'}</tbody>
+</table>
+</body></html>`;
+}
+
+app.get('/admin/stats', (req, res) => {
+  if (!isAdminRequest(req)) return res.status(404).send('Not Found');
+  const snapshot = buildAdminSnapshot();
+  if (req.query.format === 'html') {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    res.type('html').send(renderAdminHtml(snapshot, req.query.t));
+  } else {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    res.json(snapshot);
+  }
 });
 
 const rooms = new Map();

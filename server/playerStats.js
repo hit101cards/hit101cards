@@ -207,4 +207,13 @@ function getLeaderboard(opts = {}) {
   return { entries, top: entries, total, limit, offset, myEntry, period: 'all' };
 }
 
-module.exports = { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard };
+// 管理者用: 全プレイヤーの統計を返す (フィルタなし、降順)
+function getAllStats() {
+  return db.prepare(`
+    SELECT uuid, name, total_points AS totalPoints, games_played AS gamesPlayed, last_seen AS lastSeen
+    FROM player_stats
+    ORDER BY total_points DESC, games_played DESC
+  `).all();
+}
+
+module.exports = { getStats, updateTotalPoints, incrementGamesPlayed, getLeaderboard, getAllStats };
