@@ -596,8 +596,10 @@ io.on('connection', (socket) => {
     const banLeft = checkMatchBan(uuid);
     if (banLeft) return cb?.({ success: false, error: `迷惑行為のため${banLeft}秒間マッチングを利用できません` });
 
-    // カウントダウン中は参加不可
-    if (matchCountdownStartTime) return cb?.({ success: false, error: 'まもなくゲームが始まります。少し待ってから参加してください' });
+    // 満員(4人)でカウントダウン中は参加不可 (それ未満なら受け入れる)
+    if (matchCountdownStartTime && matchQueue.length >= MATCH_SIZE) {
+      return cb?.({ success: false, error: 'まもなくゲームが始まります。少し待ってから参加してください' });
+    }
 
     // 多重接続検知: 同じUUIDが既にマッチキューまたはゲーム中の場合
     if (uuid) {
