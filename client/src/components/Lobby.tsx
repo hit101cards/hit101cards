@@ -227,7 +227,7 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onJoinMatchmaking, err
 
       </div>
 
-      {/* フッター: 法的情報リンク */}
+      {/* フッター: 法的情報リンク + サポート */}
       <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-4 text-[11px] text-green-500">
         <button onClick={() => setLegalTab('privacy')} className="hover:text-green-300 underline-offset-2 hover:underline transition">
           プライバシー
@@ -236,6 +236,15 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onJoinMatchmaking, err
         <button onClick={() => setLegalTab('terms')} className="hover:text-green-300 underline-offset-2 hover:underline transition">
           利用規約
         </button>
+        <span className="text-green-700">·</span>
+        <a
+          href="https://ko-fi.com/hit101cards"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:text-green-300 underline-offset-2 hover:underline transition"
+        >
+          ☕ サポート
+        </a>
       </div>
 
       {/* ルール確認モーダル */}
