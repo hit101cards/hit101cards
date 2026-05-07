@@ -247,12 +247,12 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onJoinMatchmaking, err
         </a>
         <span className="text-green-700">·</span>
         <a
-          href="https://ko-fi.com/hit101cards"
+          href="https://ofuse.me/hit101cards"
           target="_blank"
           rel="noopener noreferrer"
           className="hover:text-green-300 underline-offset-2 hover:underline transition"
         >
-          ☕ サポート
+          💌 応援する
         </a>
       </div>
 
