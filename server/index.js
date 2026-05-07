@@ -498,6 +498,9 @@ function getCountdownSecondsForQueue(size) {
 }
 // 切断タイマー管理: `${roomId}:${playerName}` -> timer
 const disconnectTimers = new Map();
+// ターン自動進行タイマー (リロード復帰のため短い猶予を与える): `${roomId}:${playerName}` -> timer
+const turnAdvanceTimers = new Map();
+const TURN_ADVANCE_GRACE_MS = 5000;
 
 const MATCH_SIZE = 4;
 
@@ -1109,11 +1112,15 @@ io.on('connection', (socket) => {
     if (!player) return cb({ success: false, error: 'プレイヤーが見つかりません' });
     if (player.lost) return cb({ success: false, error: 'すでに脱落しています' });
 
-    // 切断タイマーをキャンセル
+    // 切断タイマー & ターン進行タイマーをキャンセル
     const timerKey = `${roomId}:${playerName}`;
     if (disconnectTimers.has(timerKey)) {
       clearTimeout(disconnectTimers.get(timerKey));
       disconnectTimers.delete(timerKey);
+    }
+    if (turnAdvanceTimers.has(timerKey)) {
+      clearTimeout(turnAdvanceTimers.get(timerKey));
+      turnAdvanceTimers.delete(timerKey);
     }
 
     // ソケットIDを更新
@@ -1469,17 +1476,36 @@ io.on('connection', (socket) => {
       console.log(`切断待機中: ${playerName} (${RECONNECT_TIMEOUT_MS / 1000}秒以内に再接続してください)`);
       broadcastToRoom(room); // disconnected フラグを他プレイヤーに通知
 
-      // ターンが来ていた場合は次へ進める
-      advanceTurnIfNeeded(room, player);
-      broadcastToRoom(room);
+      // 切断時にターンが来ていた場合: 即座に進めず、リロード復帰のため数秒待つ
+      const timerKey = `${roomId}:${playerName}`;
+      const wasCurrentTurn = room.status === 'playing' && room.players[room.currentPlayerIndex]?.name === playerName;
+      if (wasCurrentTurn) {
+        if (turnAdvanceTimers.has(timerKey)) clearTimeout(turnAdvanceTimers.get(timerKey));
+        const turnTimer = setTimeout(() => {
+          turnAdvanceTimers.delete(timerKey);
+          const r = rooms.get(roomId);
+          if (!r) return;
+          const p = r.players.find(pp => pp.name === playerName);
+          if (!p || !p.disconnected) return; // 復帰してたら何もしない
+          if (r.players[r.currentPlayerIndex]?.name !== playerName) return; // ターン既に動いてる
+          advanceTurnIfNeeded(r, p);
+          broadcastToRoom(r);
+          scheduleBotTurnIfNeeded(r);
+        }, TURN_ADVANCE_GRACE_MS);
+        turnAdvanceTimers.set(timerKey, turnTimer);
+      }
 
       // タイムアウト後に脱落（既存タイマーがあれば先にクリア）
-      const timerKey = `${roomId}:${playerName}`;
       if (disconnectTimers.has(timerKey)) {
         clearTimeout(disconnectTimers.get(timerKey));
       }
       const timer = setTimeout(() => {
         disconnectTimers.delete(timerKey);
+        // ターン進行タイマーも片付け
+        if (turnAdvanceTimers.has(timerKey)) {
+          clearTimeout(turnAdvanceTimers.get(timerKey));
+          turnAdvanceTimers.delete(timerKey);
+        }
         handlePlayerTimeout(room, playerName);
         console.log(`脱落: ${playerName} (タイムアウト)`);
       }, RECONNECT_TIMEOUT_MS);
