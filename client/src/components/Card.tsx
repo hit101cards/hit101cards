@@ -64,8 +64,15 @@ export default function CardComponent({ card, onClick, disabled }: Props) {
         </div>
 
         {/* 中央 */}
-        <div className={`text-2xl min-[430px]:text-4xl sm:text-2xl ${isJoker ? 'text-purple-500' : red ? 'text-red-500' : 'text-gray-800'}`}>
-          {isJoker ? '★' : card.suit}
+        <div
+          className={[
+            isJoker
+              ? 'text-xs min-[430px]:text-lg sm:text-sm font-black tracking-wider'
+              : 'text-2xl min-[430px]:text-4xl sm:text-2xl',
+            isJoker ? 'text-purple-500' : red ? 'text-red-500' : 'text-gray-800',
+          ].join(' ')}
+        >
+          {isJoker ? 'JOKER' : card.suit}
         </div>
 
         {/* 右下（反転） */}
