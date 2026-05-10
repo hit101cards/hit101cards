@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon --ignore playerStats.json --ignore playerStats.sqlite --ignore audit.log index.js",
+    "test": "node --test test/",
     "loadtest": "node loadtest.js"
   },
   "dependencies": {
