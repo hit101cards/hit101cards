@@ -13,6 +13,7 @@ export interface Player {
   lost: boolean;
   disconnected: boolean;
   isBot?: boolean;
+  skill?: 'beginner' | 'intermediate' | 'expert'; // Bot のスキルレベル
 }
 
 export interface LastPlayedCard extends Card {

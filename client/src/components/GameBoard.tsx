@@ -288,8 +288,8 @@ function WaitingScreen({ gameState, myId, onStartGame, onLeaveClick }: { gameSta
   const canAddBot = isHost && gameState.players.length < 6;
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  const handleAddBot = () => {
-    socket.emit('add-bot', { roomId: gameState.roomId }, () => {});
+  const handleAddBot = (skill: 'beginner' | 'intermediate' | 'expert' = 'intermediate') => {
+    socket.emit('add-bot', { roomId: gameState.roomId, skill }, () => {});
   };
   const handleRemoveBot = (botName: string) => {
     socket.emit('remove-bot', { roomId: gameState.roomId, botName }, () => {});
@@ -332,6 +332,11 @@ function WaitingScreen({ gameState, myId, onStartGame, onLeaveClick }: { gameSta
             <div key={p.id} className="flex items-center gap-3 bg-green-700/50 rounded-lg px-4 py-3">
               <span className="text-lg">{p.isBot ? '🤖' : (p.avatar || (i === 0 ? '👑' : '👤'))}</span>
               <span className="text-white font-medium flex-1">{p.name}</span>
+              {p.isBot && p.skill && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/30 text-yellow-200">
+                  {t(`wait.bot.${p.skill}`)}
+                </span>
+              )}
               {p.id === myId && <span className="text-green-400 text-xs bg-green-600 px-2 py-0.5 rounded-full">{t('wait.you')}</span>}
               {p.isBot && isHost && (
                 <button onClick={() => handleRemoveBot(p.name)} className="text-red-400 hover:text-red-300 text-xs font-bold">
@@ -348,10 +353,26 @@ function WaitingScreen({ gameState, myId, onStartGame, onLeaveClick }: { gameSta
                 className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 active:scale-95 text-black font-bold py-4 rounded-xl text-lg transition-all">
                 {gameState.players.length < 2 ? t('wait.startWaiting') : t('wait.start')}
               </button>
-              <button onClick={handleAddBot} disabled={!canAddBot}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 active:scale-95 text-white font-bold py-2.5 rounded-xl text-sm transition-all">
-                {t('wait.addBot')}
-              </button>
+              {/* Bot 追加: スキル別 3 ボタン */}
+              {canAddBot && (
+                <div>
+                  <div className="text-xs text-green-300 mb-1.5 text-center">{t('wait.addBot')}</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button onClick={() => handleAddBot('beginner')}
+                      className="py-2 rounded-lg bg-green-700 hover:bg-green-600 text-white font-bold transition text-sm">
+                      {t('wait.bot.beginner')}
+                    </button>
+                    <button onClick={() => handleAddBot('intermediate')}
+                      className="py-2 rounded-lg bg-yellow-700 hover:bg-yellow-600 text-white font-bold transition text-sm">
+                      {t('wait.bot.intermediate')}
+                    </button>
+                    <button onClick={() => handleAddBot('expert')}
+                      className="py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white font-bold transition text-sm">
+                      {t('wait.bot.expert')}
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
           {!isHost && (

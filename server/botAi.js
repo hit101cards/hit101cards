@@ -1,6 +1,43 @@
 // Bot AI: 手札とゲーム状態から次の手を決定する
 // 戻り値: { action: 'play', cardId, choice } | { action: 'draw' }
 
+// ─── スキルレベル定義 ─────────────────────────────────────────────
+//   beginner:    初心者向け。半分くらいランダム手、ほぼ読まない、温存もしない
+//   intermediate: 標準。バーストはできるだけ避け、相手読みも少し
+//   expert:      しっかり読む、温存も上手い、相手を 95-100 に追い込もうとする
+const SKILL_LEVELS = {
+  beginner: {
+    label: '🟢 初級',
+    randomActionRate: 0.4,    // 40% でランダム手
+    lookaheadWeight: 0.2,     // 相手読みの重み 20%
+    preservationWeight: 0.3,  // 温存の重み 30%
+    aggressionBonus: 0,
+    randomNoise: 1.5,         // スコアに大きめのランダム加算
+  },
+  intermediate: {
+    label: '🟡 中級',
+    randomActionRate: 0.05,
+    lookaheadWeight: 1.0,
+    preservationWeight: 1.0,
+    aggressionBonus: 2,
+    randomNoise: 0.5,
+  },
+  expert: {
+    label: '🔴 上級',
+    randomActionRate: 0.0,
+    lookaheadWeight: 1.5,     // 相手読みを強化
+    preservationWeight: 1.2,
+    aggressionBonus: 5,       // 追い込みボーナスを強化
+    randomNoise: 0.1,
+  },
+};
+
+const SKILL_KEYS = Object.keys(SKILL_LEVELS);
+function getSkill(key) {
+  return SKILL_LEVELS[key] || SKILL_LEVELS.intermediate;
+}
+
+// ─── カード値計算 ────────────────────────────────────────────────
 function cardValue(rank, currentTotal, choice) {
   if (rank === 'A') return 1;
   if (rank === 'Joker') return currentTotal === 100 ? 1 : 50;
@@ -21,14 +58,12 @@ function enumerateChoices(card) {
   return [{ choice: null }];
 }
 
-// 1候補のスコア（高いほど良い）
-function scoreOption(card, currentTotal, choice) {
+// 1候補のスコア (高いほど良い)
+function scoreOption(card, currentTotal, choice, randomNoise) {
   const val = cardValue(card.rank, currentTotal, choice);
   const newTotal = Math.max(0, currentTotal + val);
 
-  // 100 時の Joker は特殊勝利
   if (card.rank === 'Joker' && currentTotal === 100) return 1200;
-
   if (newTotal === 101) return 1000;
   if (newTotal > 101)   return -1000 - (newTotal - 101);
 
@@ -37,20 +72,15 @@ function scoreOption(card, currentTotal, choice) {
   else if (newTotal >= 95) score -= 10;
   else if (newTotal <= 50) score += 5;
 
-  // 可能なら強カードは後半用に温存したいので、値の絶対値が小さい方を微優先
   score -= Math.abs(val) * 0.1;
-
-  return score + Math.random() * 0.5;
+  return score + Math.random() * randomNoise;
 }
 
-// 相手が次にバーストしやすいかを評価（2手先読み）
-// newTotal を渡したとき、相手が困る度合いを返す（高いほど攻撃的に良い）
+// 相手が次にバーストしやすいかを評価
 function opponentDifficultyScore(newTotal) {
   if (newTotal >= 95 && newTotal < 101) {
-    // 相手が使えるカードが少なくなる（Aや10-、8skip、9return 程度）
-    // 95-100 に追い込むほど有利
     const dist = 101 - newTotal;
-    if (dist <= 1) return 15; // 100: Aで101されるリスクはあるが、ほとんどの手でバースト
+    if (dist <= 1) return 15;
     if (dist <= 3) return 10;
     if (dist <= 5) return 6;
     return 3;
@@ -58,42 +88,65 @@ function opponentDifficultyScore(newTotal) {
   return 0;
 }
 
-// 手札の戦略的価値を考慮したスコア補正
-function handPreservationBonus(card, hand) {
-  // 手札に10（±10）がある場合は温存価値が高い
+function handPreservationBonus(card) {
   if (card.rank === '10') return -3;
-  // スキップ・リターンは終盤で価値が高い
   if (card.rank === '8' || card.rank === '9') return -1.5;
-  // Jokerは最強カード、温存
   if (card.rank === 'Joker') return -5;
   return 0;
 }
 
-function decideBotMove(hand, currentTotal, playerCount) {
-  if (!hand || hand.length === 0) {
-    return { action: 'draw' };
+// ─── 初級用: ランダム手 ─────────────────────────────────────────
+//   ただし「100% バースト確実」だけは避ける (運も実力 + 救済)
+function beginnerRandomAction(hand, currentTotal) {
+  if (!hand || hand.length === 0) return { action: 'draw' };
+  // 全候補を列挙してバーストするものを除外
+  const safe = [];
+  for (const card of hand) {
+    for (const { choice } of enumerateChoices(card)) {
+      const val = cardValue(card.rank, currentTotal, choice);
+      const newTotal = Math.max(0, currentTotal + val);
+      // バーストする選択肢は除外。それ以外はランダム
+      if (newTotal <= 101) safe.push({ card, choice });
+    }
+  }
+  // 全部バーストしかない場合は山札から引く (運に賭ける)
+  if (safe.length === 0) return { action: 'draw' };
+  const pick = safe[Math.floor(Math.random() * safe.length)];
+  return { action: 'play', cardId: pick.card.id, choice: pick.choice };
+}
+
+// ─── メインの判断関数 (skill パラメタ追加) ───────────────────
+function decideBotMove(hand, currentTotal, playerCount, skillKey) {
+  if (!hand || hand.length === 0) return { action: 'draw' };
+
+  const skill = getSkill(skillKey);
+
+  // 初級: 一定確率でランダム手 (運要素を入れて初心者を勝たせる)
+  if (skill.randomActionRate > 0 && Math.random() < skill.randomActionRate) {
+    return beginnerRandomAction(hand, currentTotal);
   }
 
   let best = null;
   for (const card of hand) {
     for (const { choice } of enumerateChoices(card)) {
-      let s = scoreOption(card, currentTotal, choice);
+      let s = scoreOption(card, currentTotal, choice, skill.randomNoise);
 
-      // 2手先読み: 相手を困らせるボーナス
       const val = cardValue(card.rank, currentTotal, choice);
       const newTotal = Math.max(0, currentTotal + val);
+
+      // 相手読み (lookahead) — スキルに応じて重み付け
       if (newTotal < 101) {
-        s += opponentDifficultyScore(newTotal);
+        s += opponentDifficultyScore(newTotal) * skill.lookaheadWeight;
       }
 
-      // 手札温存ボーナス（手札が3枚以上あるときのみ温存を考慮）
+      // 手札温存 (3 枚以上のとき) — スキルに応じて重み付け
       if (hand.length >= 3) {
-        s += handPreservationBonus(card, hand);
+        s += handPreservationBonus(card) * skill.preservationWeight;
       }
 
-      // プレイヤー数が少ない場合はアグレッシブに
+      // 1 対 1 アグレッション + スキル別ボーナス
       if (playerCount && playerCount <= 2 && newTotal >= 90 && newTotal < 101) {
-        s += 2; // 1対1では高い数値に追い込む方が有利
+        s += skill.aggressionBonus;
       }
 
       if (!best || s > best.score) {
@@ -102,22 +155,19 @@ function decideBotMove(hand, currentTotal, playerCount) {
     }
   }
 
-  // 手札が全部バーストしかない場合は山札から引く
-  if (best.score <= -1000) {
-    return { action: 'draw' };
-  }
-
+  if (best.score <= -1000) return { action: 'draw' };
   return { action: 'play', cardId: best.cardId, choice: best.choice };
 }
 
-// 引いたカードの扱い: 選択が必要なときのみ呼ばれる
-function decideDrawnCardChoice(card, currentTotal) {
+// 引いたカードの扱い: 選択が必要なときのみ
+function decideDrawnCardChoice(card, currentTotal, skillKey) {
+  const skill = getSkill(skillKey);
   let best = null;
   for (const { choice } of enumerateChoices(card)) {
-    const s = scoreOption(card, currentTotal, choice);
+    const s = scoreOption(card, currentTotal, choice, skill.randomNoise);
     if (!best || s > best.score) best = { score: s, choice };
   }
   return best ? best.choice : 'plus';
 }
 
-module.exports = { decideBotMove, decideDrawnCardChoice };
+module.exports = { decideBotMove, decideDrawnCardChoice, SKILL_LEVELS, SKILL_KEYS };

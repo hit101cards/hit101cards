@@ -8,7 +8,7 @@ const {
   banUUID, unbanUUID, isBanned, getBannedList,
   recordCardPlay, recordGameStart, getCardUsageStats, getHourlyActivity, getTypeStats,
 } = require('./playerStats');
-const { decideBotMove, decideDrawnCardChoice } = require('./botAi');
+const { decideBotMove, decideDrawnCardChoice, SKILL_KEYS } = require('./botAi');
 const { logAudit, isSuspiciousBurst, recordAction, clearAction } = require('./audit');
 
 const app = express();
@@ -761,11 +761,11 @@ function doBotTurn(roomId) {
 
   try {
     if (room.pendingDrawnCard) {
-      const choice = decideDrawnCardChoice(room.pendingDrawnCard, room.currentTotal);
+      const choice = decideDrawnCardChoice(room.pendingDrawnCard, room.currentTotal, player.skill);
       processDrawAndPlay(room, player.id, choice);
     } else {
       const activePlayers = room.players.filter(p => !p.lost);
-      const move = decideBotMove(player.hand, room.currentTotal, activePlayers.length);
+      const move = decideBotMove(player.hand, room.currentTotal, activePlayers.length, player.skill);
       if (move.action === 'play') {
         processPlayCard(room, player.id, move.cardId, move.choice);
       } else {
@@ -774,7 +774,7 @@ function doBotTurn(roomId) {
           if (!draw.needsChoice) {
             processDrawAndPlay(room, player.id, null);
           } else {
-            const choice = decideDrawnCardChoice(draw.card, room.currentTotal);
+            const choice = decideDrawnCardChoice(draw.card, room.currentTotal, player.skill);
             processDrawAndPlay(room, player.id, choice);
           }
         }
@@ -1284,16 +1284,17 @@ io.on('connection', (socket) => {
     socket.data.playerName = null;
   });
 
-  socket.on('add-bot', ({ roomId }, cb) => {
+  socket.on('add-bot', ({ roomId, skill }, cb) => {
     const room = rooms.get(roomId);
     if (!room) return cb?.({ success: false, error: 'ルームが見つかりません' });
     if (room.isMatchmaking) return cb?.({ success: false, error: 'マッチング中はBotを追加できません' });
     if (room.hostId !== socket.id) return cb?.({ success: false, error: 'ホストのみBotを追加できます' });
     if (room.status !== 'waiting') return cb?.({ success: false, error: '待機中のみ追加できます' });
     if (room.players.length >= 6) return cb?.({ success: false, error: 'ルームが満員です' });
+    const safeSkill = SKILL_KEYS.includes(skill) ? skill : 'intermediate';
     const name = genBotName(room);
     const id = `bot:${roomId}:${Date.now()}:${Math.floor(Math.random() * 1000)}`;
-    room.players.push({ id, name, hand: [], lost: false, disconnected: false, isBot: true });
+    room.players.push({ id, name, hand: [], lost: false, disconnected: false, isBot: true, skill: safeSkill });
     room.points[name] = 0;
     broadcastToRoom(room);
     cb?.({ success: true });
