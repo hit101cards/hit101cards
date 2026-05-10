@@ -611,15 +611,21 @@ export default function App() {
       {/* デイリーボーナストースト */}
       {dailyBonus !== null && (
         <div
-          className="fixed left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-yellow-400 to-yellow-300 text-black rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3"
+          className="fixed left-1/2 z-50 rounded-2xl shadow-2xl px-6 py-3 flex items-center gap-3 animate-toast-in border-2"
           role="alert"
           aria-live="polite"
-          style={{ top: 'calc(1.25rem + env(safe-area-inset-top))' }}
+          style={{
+            top: 'calc(1.25rem + env(safe-area-inset-top))',
+            background: 'linear-gradient(135deg, #fde047 0%, #facc15 50%, #eab308 100%)',
+            borderColor: 'rgba(255,255,255,0.4)',
+            boxShadow: '0 12px 32px rgba(250,204,21,0.5), inset 0 1px 0 rgba(255,255,255,0.4)',
+            color: '#1f2937',
+          }}
         >
-          <div className="text-3xl">🎁</div>
+          <div className="text-3xl drop-shadow-md">🎁</div>
           <div>
-            <div className="font-bold text-sm">{t('dailyBonus.title')}</div>
-            <div className="font-black text-lg">{t('dailyBonus.amount', { amount: dailyBonus })}</div>
+            <div className="font-bold text-xs uppercase tracking-wider opacity-80">{t('dailyBonus.title')}</div>
+            <div className="font-black text-xl tabular-nums">{t('dailyBonus.amount', { amount: dailyBonus })}</div>
           </div>
         </div>
       )}

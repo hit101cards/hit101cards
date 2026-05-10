@@ -678,11 +678,18 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
   const orderedOthers = Array.from({ length: n - 1 }, (_, i) => players[(myIndex + 1 + i) % n]);
 
   return (
-    <div className="min-h-screen bg-green-900 flex flex-col select-none overflow-y-auto">
+    <div className="min-h-screen flex flex-col select-none overflow-y-auto">
+      {/* 中央に淡いスポットライト (テーブル感) */}
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[60vw] h-[60vw] max-w-[700px] max-h-[700px] rounded-full opacity-30 blur-3xl"
+          style={{ background: 'radial-gradient(circle, rgba(250,204,21,0.18) 0%, transparent 70%)' }}
+        />
+      </div>
 
       {/* 通知バナー */}
       {notification && (
-        <div className="fixed left-1/2 -translate-x-1/2 z-50 bg-yellow-500 text-black font-bold px-5 py-2.5 rounded-full shadow-lg text-sm whitespace-nowrap" style={{ top: 'calc(1rem + env(safe-area-inset-top))' }}>
+        <div className="fixed left-1/2 z-50 bg-yellow-500 text-black font-bold px-5 py-2.5 rounded-full shadow-lg text-sm whitespace-nowrap animate-toast-in" style={{ top: 'calc(1rem + env(safe-area-inset-top))' }}>
           {notification}
         </div>
       )}
@@ -742,9 +749,9 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
       </div>
 
       {/* ゲーム情報（中央） */}
-      <div className="flex items-center justify-center px-1 py-10 sm:py-12">
+      <div className="relative flex items-center justify-center px-1 py-10 sm:py-12">
         <div className="text-center space-y-2 sm:space-y-3 w-full">
-          <p className="text-green-500 text-xs uppercase tracking-widest">{t('game.round', { n: roundCount })} ｜ {t('game.totalLabel')}</p>
+          <p className="text-yellow-200/60 text-[11px] uppercase tracking-[0.3em] font-bold">{t('game.round', { n: roundCount })} ｜ {t('game.totalLabel')}</p>
 
           {/* 合計 + 最後のカード + 山札 */}
           <div className="relative flex items-center justify-center gap-3 sm:gap-6">
@@ -761,12 +768,21 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
               </div>
             )}
 
-            {/* 合計 */}
-            <div className={`text-6xl sm:text-8xl font-bold tabular-nums ${totalColor} transition-colors duration-300`}>
+            {/* 合計 — リッチな数字、危険値で色変化 + 微発光 */}
+            <div
+              className={`text-7xl sm:text-9xl font-black tabular-nums transition-colors duration-300 ${totalColor}`}
+              style={{
+                textShadow: shownTotal >= 90
+                  ? '0 0 24px rgba(248, 113, 113, 0.6), 0 4px 8px rgba(0,0,0,0.6)'
+                  : shownTotal >= 70
+                  ? '0 0 18px rgba(250, 204, 21, 0.5), 0 4px 8px rgba(0,0,0,0.6)'
+                  : '0 4px 12px rgba(0,0,0,0.6)',
+              }}
+            >
               {shownTotal}
             </div>
 
-            {/* 山札（右） */}
+            {/* 山札（右）— 三層スタック + 黄金リング */}
             <button
               ref={deckRef}
               onClick={isMyTurn ? onDrawFromDeck : undefined}
@@ -776,12 +792,12 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
             >
               {/* カードの重なり（奥行き表現） */}
               <div className="relative">
-                <div className="absolute top-1 left-1 w-20 sm:w-16 h-28 sm:h-24 rounded-lg bg-blue-900 border border-blue-700" />
-                <div className="absolute top-0.5 left-0.5 w-20 sm:w-16 h-28 sm:h-24 rounded-lg bg-blue-900 border border-blue-700" />
-                <div className={`relative w-20 sm:w-16 h-28 sm:h-24 rounded-lg border-2 flex items-center justify-center
+                <div className="absolute top-1.5 left-1.5 w-20 sm:w-16 h-28 sm:h-24 rounded-lg bg-gradient-to-br from-blue-900 to-blue-950 border border-blue-700/70 shadow-md" />
+                <div className="absolute top-0.5 left-0.5 w-20 sm:w-16 h-28 sm:h-24 rounded-lg bg-gradient-to-br from-blue-800 to-blue-900 border border-blue-600/70 shadow-md" />
+                <div className={`relative w-20 sm:w-16 h-28 sm:h-24 rounded-lg border-2 flex items-center justify-center bg-gradient-to-br from-blue-700 to-blue-900
                   ${isMyTurn
-                    ? 'bg-blue-800 border-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.6)]'
-                    : 'bg-blue-900 border-blue-600'}`}
+                    ? 'border-yellow-400 animate-glow-pulse'
+                    : 'border-blue-600/60'}`}
                 >
                   <span className="text-4xl sm:text-4xl">?</span>
                 </div>
@@ -791,15 +807,18 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
           </div>
 
           {isMyTurn ? (
-            <div className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm bg-yellow-500 text-black">
+            <div
+              className="inline-block px-4 sm:px-5 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm bg-gradient-to-b from-yellow-300 to-yellow-500 text-black animate-glow-pulse"
+              style={{ boxShadow: '0 4px 12px rgba(250,204,21,0.4), inset 0 1px 0 rgba(255,255,255,0.3)' }}
+            >
               {t('game.yourTurn')}
             </div>
           ) : isBotTurn ? (
-            <div className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm bg-indigo-500/70 text-white">
+            <div className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm bg-indigo-600/80 text-white border border-indigo-400/30 backdrop-blur-sm">
               {t('game.botThinking', { name: currentPlayerName })}
             </div>
           ) : status === 'playing' ? (
-            <div className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm bg-green-700/50 text-green-300">
+            <div className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm bg-green-800/70 text-green-200 border border-green-600/40 backdrop-blur-sm">
               {t('game.othersTurn', { name: currentPlayerName })}
             </div>
           ) : null}

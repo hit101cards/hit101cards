@@ -91,50 +91,62 @@ export default function Lobby({ onCreateRoom, onJoinRoom, onJoinMatchmaking, err
   }
 
   return (
-    <div className="min-h-screen bg-green-900 flex items-center justify-center p-4 relative">
+    <div className="min-h-screen flex items-center justify-center p-4 relative">
+      {/* 装飾: スポットライト風オーラ */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[40rem] h-[40rem] rounded-full opacity-25 blur-3xl" style={{ background: 'radial-gradient(circle, rgba(250,204,21,0.5) 0%, transparent 70%)' }} />
+      </div>
+
       {/* 言語切替 */}
-      <div className="absolute right-3 flex gap-1 text-xs" style={{ top: 'calc(0.75rem + env(safe-area-inset-top))' }}>
+      <div className="absolute right-3 flex gap-1 text-xs z-10" style={{ top: 'calc(0.75rem + env(safe-area-inset-top))' }}>
         <button
           onClick={() => setLocale('ja')}
-          className={`px-2 py-1 rounded ${locale === 'ja' ? 'bg-yellow-500 text-black' : 'bg-green-800 text-green-300'}`}
+          className={`px-2.5 py-1 rounded-lg backdrop-blur-sm ${locale === 'ja' ? 'bg-yellow-500 text-black font-bold' : 'bg-green-800/70 text-green-200'}`}
         >🇯🇵 JA</button>
         <button
           onClick={() => setLocale('en')}
-          className={`px-2 py-1 rounded ${locale === 'en' ? 'bg-yellow-500 text-black' : 'bg-green-800 text-green-300'}`}
+          className={`px-2.5 py-1 rounded-lg backdrop-blur-sm ${locale === 'en' ? 'bg-yellow-500 text-black font-bold' : 'bg-green-800/70 text-green-200'}`}
         >🇺🇸 EN</button>
       </div>
 
-      <div className="bg-green-800 rounded-2xl p-8 shadow-2xl w-full max-w-sm">
+      <div className="bg-green-800 rounded-3xl p-8 shadow-2xl w-full max-w-sm border border-yellow-500/20 relative z-10">
         {/* タイトル */}
-        <div className="text-center mb-8">
-          <div className="text-6xl mb-3">🃏</div>
-          <h1 className="text-4xl font-bold text-white tracking-wide">{t('lobby.title')}<span className="text-yellow-400">101</span></h1>
-          <p className="text-green-400 mt-1 text-sm">{t('lobby.tagline')}</p>
+        <div className="text-center mb-7">
+          <div className="text-6xl mb-3 drop-shadow-[0_4px_12px_rgba(0,0,0,0.5)]">🃏</div>
+          <h1 className="text-5xl font-black tracking-tight">
+            <span className="gold-shimmer">{t('lobby.title')}101</span>
+          </h1>
+          <p className="text-green-300 mt-2 text-sm tracking-wide">{t('lobby.tagline')}</p>
         </div>
 
         {mode === 'menu' && (
           <div className="space-y-3">
             <button
               onClick={() => handleModeChange('create')}
-              className="w-full bg-yellow-500 hover:bg-yellow-400 active:scale-95 text-black font-bold py-4 rounded-xl text-lg transition-all duration-150 shadow-lg"
+              className="group w-full bg-yellow-500 text-black font-bold py-4 rounded-xl text-base shadow-lg flex items-center justify-center gap-3"
             >
+              <span className="text-2xl group-hover:rotate-12 transition-transform">🎴</span>
               {t('lobby.create')}
             </button>
             <button
               onClick={() => handleModeChange('join')}
-              className="w-full bg-blue-500 hover:bg-blue-400 active:scale-95 text-white font-bold py-4 rounded-xl text-lg transition-all duration-150 shadow-lg"
+              className="group w-full bg-gradient-to-b from-blue-400 to-blue-600 hover:brightness-110 text-white font-bold py-4 rounded-xl text-base shadow-lg flex items-center justify-center gap-3"
+              style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.15)' }}
             >
+              <span className="text-2xl group-hover:translate-x-1 transition-transform">🚪</span>
               {t('lobby.join')}
             </button>
             <button
               onClick={() => handleModeChange('matchmaking')}
-              className="w-full bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold py-4 rounded-xl text-lg transition-all duration-150 shadow-lg"
+              className="group w-full bg-gradient-to-b from-purple-500 to-purple-700 hover:brightness-110 text-white font-bold py-4 rounded-xl text-base shadow-lg flex items-center justify-center gap-3"
+              style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.15)' }}
             >
+              <span className="text-2xl group-hover:scale-110 transition-transform">🔍</span>
               {t('lobby.matchmaking')}
             </button>
             <button
               onClick={() => setShowRules(true)}
-              className="w-full bg-green-700 hover:bg-green-600 active:scale-95 text-green-300 font-bold py-2.5 rounded-xl text-sm transition-all duration-150"
+              className="w-full bg-green-700/60 hover:bg-green-700 text-green-200 font-bold py-2.5 rounded-xl text-sm transition-all border border-green-600/50"
             >
               {t('lobby.rules')}
             </button>

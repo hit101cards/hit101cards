@@ -18,14 +18,20 @@ export default function WelcomeModal({ onClose }: Props) {
       <div
         className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-4"
         onClick={onClose}
+        role="dialog"
+        aria-modal="true"
       >
         <div
-          className="bg-green-800 max-w-md w-full max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl border-2 border-yellow-500"
+          className="bg-green-800 max-w-md w-full max-h-[90vh] overflow-y-auto rounded-3xl shadow-2xl border border-yellow-500/40 relative"
           onClick={(e) => e.stopPropagation()}
+          style={{ boxShadow: '0 30px 80px rgba(0,0,0,0.7), 0 0 60px rgba(250,204,21,0.15)' }}
         >
-          <div className="text-center p-5 border-b border-green-700">
-            <h2 className="text-2xl font-bold text-yellow-300 mb-1">
-              {t('welcome.title')}
+          {/* 上部のスポットライト風グロー */}
+          <div className="pointer-events-none absolute -top-20 left-1/2 -translate-x-1/2 w-64 h-32 rounded-full opacity-50 blur-3xl" style={{ background: 'radial-gradient(circle, rgba(250,204,21,0.6) 0%, transparent 70%)' }} />
+
+          <div className="text-center p-6 border-b border-green-700/60 relative">
+            <h2 className="text-3xl font-black mb-1">
+              <span className="gold-shimmer">{t('welcome.title')}</span>
             </h2>
             <p className="text-xs text-green-300">{t('welcome.subtitle')}</p>
           </div>
