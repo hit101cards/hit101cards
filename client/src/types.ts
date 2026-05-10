@@ -7,6 +7,7 @@ export interface Card {
 export interface Player {
   id: string;
   name: string;
+  avatar?: string;
   handCount: number;
   hand: Card[] | null;
   lost: boolean;

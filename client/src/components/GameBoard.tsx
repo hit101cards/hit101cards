@@ -4,23 +4,26 @@ import { GameState, Card, Player, RoundResult } from '../types';
 import CardComponent from './Card';
 import RulesModal from './RulesModal';
 import { playCardSound, playDrawSound, playTurnSound, playHit101Sound, playBustSound, playJokerSound, playSkipSound, playReturnSound, playCountTick, playTurnWarning, isMuted, toggleMute } from '../sounds';
+import { copyText, shareOrCopy } from '../clipboard';
+import { useLocale, t } from '../i18n';
 
 function LeaveConfirmModal({ isPlaying, onCancel, onConfirm }: { isPlaying: boolean; onCancel: () => void; onConfirm: () => void }) {
+  useLocale();
   return (
-    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-label="退出確認">
+    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
       <div className="bg-green-800 rounded-2xl p-6 max-w-xs w-full shadow-2xl text-center">
         <p className="text-xl font-bold text-white mb-2">
-          {isPlaying ? 'ゲームを退出しますか？' : 'ロビーに戻りますか？'}
+          {isPlaying ? t('leave.titlePlaying') : t('leave.titleWaiting')}
         </p>
         {isPlaying && (
-          <p className="text-green-400 text-sm mb-2">ゲームから抜けると脱落扱いになります</p>
+          <p className="text-green-400 text-sm mb-2">{t('leave.note')}</p>
         )}
         <div className="flex gap-3 mt-4">
           <button onClick={onCancel} className="flex-1 bg-green-700 hover:bg-green-600 active:scale-95 text-white font-bold py-3 rounded-xl transition-all">
-            キャンセル
+            {t('leave.cancel')}
           </button>
           <button onClick={onConfirm} className="flex-1 bg-red-600 hover:bg-red-500 active:scale-95 text-white font-bold py-3 rounded-xl transition-all">
-            {isPlaying ? '退出する' : 'ロビーへ'}
+            {isPlaying ? t('leave.confirmPlaying') : t('leave.confirmWaiting')}
           </button>
         </div>
       </div>
@@ -82,14 +85,15 @@ interface Props {
 }
 
 function OtherPlayerArea({ player, isCurrentTurn, points, cumulative, elRef }: { player: Player; isCurrentTurn: boolean; points: number; cumulative?: { totalPoints: number } | null; elRef?: (el: HTMLDivElement | null) => void }) {
+  useLocale();
   return (
     <div ref={elRef} className={`text-center p-1.5 sm:p-2 rounded-xl transition-all w-[5.5rem] sm:w-[7rem] flex-shrink-0 ${isCurrentTurn && !player.lost && !player.disconnected ? 'ring-2 ring-yellow-400 bg-yellow-400/10' : ''}`}>
       <p className={`text-sm sm:text-base font-bold truncate ${player.lost ? 'text-red-400 line-through' : player.disconnected ? 'text-gray-400' : isCurrentTurn ? 'text-yellow-400' : 'text-green-300'}`}>
-        {player.isBot ? '🤖 ' : ''}{player.name}{player.disconnected ? '🔌' : ''}{isCurrentTurn && !player.lost && !player.disconnected ? '←' : ''}
+        {player.isBot ? '🤖 ' : (player.avatar ? player.avatar + ' ' : '')}{player.name}{player.disconnected ? '🔌' : ''}{isCurrentTurn && !player.lost && !player.disconnected ? '←' : ''}
       </p>
       <p className="text-yellow-300 text-xs sm:text-sm font-bold">{points >= 0 ? '+' : ''}{points}pt</p>
       {cumulative != null && (
-        <p className="text-green-400 text-xs">累計 {cumulative.totalPoints >= 0 ? '+' : ''}{cumulative.totalPoints}</p>
+        <p className="text-green-400 text-xs">{t('game.cumulativeShort', { points: (cumulative.totalPoints >= 0 ? '+' : '') + cumulative.totalPoints })}</p>
       )}
     </div>
   );
@@ -97,6 +101,7 @@ function OtherPlayerArea({ player, isCurrentTurn, points, cumulative, elRef }: {
 
 // 最終結果画面
 function EndScreen({ players, points, cumulativeStats, onRestart }: { players: Player[]; points: Record<string, number>; cumulativeStats: Record<string, { totalPoints: number; gamesPlayed: number }> | null; onRestart: () => void }) {
+  useLocale();
   const ranked = [...players].sort((a, b) => (points[b.name] || 0) - (points[a.name] || 0));
   const medals = ['🥇', '🥈', '🥉'];
   const isMatchmaking = !!cumulativeStats;
@@ -105,7 +110,7 @@ function EndScreen({ players, points, cumulativeStats, onRestart }: { players: P
     <div className="min-h-screen bg-green-900 flex items-center justify-center p-4">
       <div className="bg-green-800 rounded-2xl p-8 max-w-sm w-full shadow-2xl text-center">
         <div className="text-6xl mb-3">🏆</div>
-        <h2 className="text-3xl font-bold text-yellow-400 mb-6">最終結果</h2>
+        <h2 className="text-3xl font-bold text-yellow-400 mb-6">{t('end.title')}</h2>
         <div className="space-y-3 mb-8">
           {ranked.map((p, i) => (
             <div key={p.id} className={`rounded-xl px-4 py-3 ${i === 0 ? 'bg-yellow-500/20 border border-yellow-400' : 'bg-green-700/50'}`}>
@@ -120,7 +125,7 @@ function EndScreen({ players, points, cumulativeStats, onRestart }: { players: P
               </div>
               {isMatchmaking && cumulativeStats[p.name] != null && (
                 <div className="flex justify-end mt-1">
-                  <span className="text-yellow-400 text-xs">累計 {cumulativeStats[p.name].totalPoints >= 0 ? '+' : ''}{cumulativeStats[p.name].totalPoints}pt</span>
+                  <span className="text-yellow-400 text-xs">{t('game.cumulativeShort', { points: (cumulativeStats[p.name].totalPoints >= 0 ? '+' : '') + cumulativeStats[p.name].totalPoints })}</span>
                 </div>
               )}
             </div>
@@ -130,7 +135,7 @@ function EndScreen({ players, points, cumulativeStats, onRestart }: { players: P
           onClick={onRestart}
           className="w-full bg-yellow-500 hover:bg-yellow-400 active:scale-95 text-black font-bold py-3 rounded-xl transition-all"
         >
-          最初から始める
+          {t('end.restart')}
         </button>
       </div>
     </div>
@@ -140,7 +145,7 @@ function EndScreen({ players, points, cumulativeStats, onRestart }: { players: P
 // ラウンド終了・投票オーバーレイ
 function RoundEndOverlay({ result, players, points, cumulativeStats, votes, myId, roundCount, voteDeadline, onVote }:
   { result: RoundResult; players: Player[]; points: Record<string, number>; cumulativeStats: Record<string, { totalPoints: number }> | null; votes: Record<string, 'continue' | 'quit' | null>; myId: string; roundCount: number; voteDeadline: number | null; onVote: (v: 'continue' | 'quit') => void }) {
-
+  useLocale();
   const me = players.find(p => p.id === myId);
   const myVote = me ? votes[me.name] : null;
   const ranked = [...players].sort((a, b) => (points[b.name] || 0) - (points[a.name] || 0));
@@ -170,17 +175,21 @@ function RoundEndOverlay({ result, players, points, cumulativeStats, votes, myId
         {/* ラウンド結果 */}
         <div className="text-center mb-4">
           <div className="text-4xl mb-1">{emoji}</div>
-          <h2 className="text-xl font-bold text-white">ラウンド {roundCount} 終了</h2>
-          <p className="text-green-300 text-sm mt-1">{result.description}</p>
+          <h2 className="text-xl font-bold text-white">{t('round.title', { n: roundCount })}</h2>
+          <p className="text-green-300 text-sm mt-1">
+            {(result as any).descriptionKey
+              ? t((result as any).descriptionKey, (result as any).descriptionParams)
+              : result.description}
+          </p>
         </div>
 
         {/* ポイント変動 */}
         <div className="mb-3">
-          <p className="text-green-400 text-xs mb-1.5 font-bold uppercase tracking-wider">ポイント変動</p>
+          <p className="text-green-400 text-xs mb-1.5 font-bold uppercase tracking-wider">{t('round.pointChanges')}</p>
           <div className="space-y-1">
             {result.pointChanges.map(pc => (
               <div key={pc.playerName} className="flex items-center justify-between bg-green-700/50 rounded-lg px-3 py-1.5">
-                <span className="text-white text-sm">{pc.playerName}{pc.playerName === me?.name ? ' (あなた)' : ''}</span>
+                <span className="text-white text-sm">{pc.playerName}{pc.playerName === me?.name ? ' ' + t('round.youSuffix') : ''}</span>
                 <span className={`font-bold text-sm ${pc.change > 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {pc.change > 0 ? '+' : ''}{pc.change}pt
                 </span>
@@ -191,14 +200,14 @@ function RoundEndOverlay({ result, players, points, cumulativeStats, votes, myId
 
         {/* 現在の順位 */}
         <div className="mb-5">
-          <p className="text-green-400 text-xs mb-1.5 font-bold uppercase tracking-wider">現在の順位</p>
+          <p className="text-green-400 text-xs mb-1.5 font-bold uppercase tracking-wider">{t('round.currentRanking')}</p>
           <div className="space-y-1">
             {ranked.map((p, i) => (
               <div key={p.id} className="bg-green-700/50 rounded-lg px-3 py-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-sm">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span>
-                    <span className="text-white text-sm">{p.name}{p.id === myId ? ' (あなた)' : ''}</span>
+                    <span className="text-white text-sm">{p.name}{p.id === myId ? ' ' + t('round.youSuffix') : ''}</span>
                   </div>
                   <span className={`font-bold text-sm ${(points[p.name] || 0) >= 0 ? 'text-yellow-300' : 'text-red-400'}`}>
                     {(points[p.name] || 0) >= 0 ? '+' : ''}{points[p.name] || 0}pt
@@ -206,7 +215,7 @@ function RoundEndOverlay({ result, players, points, cumulativeStats, votes, myId
                 </div>
                 {cumulativeStats?.[p.name] != null && (
                   <div className="flex justify-end">
-                    <span className="text-yellow-400 text-xs">累計 {cumulativeStats[p.name].totalPoints >= 0 ? '+' : ''}{cumulativeStats[p.name].totalPoints}pt</span>
+                    <span className="text-yellow-400 text-xs">{t('game.cumulativeShort', { points: (cumulativeStats[p.name].totalPoints >= 0 ? '+' : '') + cumulativeStats[p.name].totalPoints })}</span>
                   </div>
                 )}
               </div>
@@ -218,16 +227,16 @@ function RoundEndOverlay({ result, players, points, cumulativeStats, votes, myId
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-green-400 text-xs font-bold uppercase tracking-wider">
-              続ける？ ({votedCount}/{activePlayers.length}人が投票済み)
+              {t('round.continueQuestion', { voted: votedCount, total: activePlayers.length })}
             </p>
             {remaining !== null && (
               <span className={`text-xs font-bold tabular-nums ${remaining <= 10 ? 'text-red-400' : 'text-yellow-300'}`}>
-                ⏱ {remaining}秒
+                {t('round.timerLabel', { seconds: remaining })}
               </span>
             )}
           </div>
           {remaining === null && votedCount === 0 && (
-            <p className="text-green-500 text-xs mb-2">誰かが投票するとカウントダウンが始まります</p>
+            <p className="text-green-500 text-xs mb-2">{t('round.waitingForVote')}</p>
           )}
 
           {/* 各プレイヤーの投票状況 */}
@@ -236,9 +245,9 @@ function RoundEndOverlay({ result, players, points, cumulativeStats, votes, myId
               const v = votes[p.name];
               return (
                 <div key={p.id} className="flex items-center justify-between bg-green-700/30 rounded-lg px-3 py-1">
-                  <span className="text-white text-sm">{p.name}{p.id === myId ? ' (あなた)' : ''}</span>
+                  <span className="text-white text-sm">{p.name}{p.id === myId ? ' ' + t('round.youSuffix') : ''}</span>
                   <span className="text-sm">
-                    {v === 'continue' ? '✅ 続ける' : v === 'quit' ? '🚪 やめる' : '⏳ 投票中...'}
+                    {v === 'continue' ? t('round.voteDone') : v === 'quit' ? t('round.voteQuit') : t('round.voting')}
                   </span>
                 </div>
               );
@@ -252,20 +261,20 @@ function RoundEndOverlay({ result, players, points, cumulativeStats, votes, myId
               disabled={remaining === 0}
               className={`flex-1 active:scale-95 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed ${myVote === 'continue' ? 'bg-green-500 ring-2 ring-white' : 'bg-green-700 hover:bg-green-600'}`}
             >
-              ✅ 続ける
+              {t('round.continue')}
             </button>
             <button
               onClick={() => onVote('quit')}
               disabled={remaining === 0}
               className={`flex-1 active:scale-95 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed ${myVote === 'quit' ? 'bg-gray-500 ring-2 ring-white' : 'bg-gray-700 hover:bg-gray-600'}`}
             >
-              🚪 やめる
+              {t('round.quit')}
             </button>
           </div>
           {remaining === 0 ? (
-            <p className="text-center text-xs text-red-400 mt-2 font-bold">投票は終了しました</p>
+            <p className="text-center text-xs text-red-400 mt-2 font-bold">{t('round.voteEnded')}</p>
           ) : myVote !== null ? (
-            <p className="text-center text-xs text-green-500 mt-2 opacity-70">他の人の投票を待っています... （変更可）</p>
+            <p className="text-center text-xs text-green-500 mt-2 opacity-70">{t('round.waitingForOthers')}</p>
           ) : null}
         </div>
       </div>
@@ -274,39 +283,56 @@ function RoundEndOverlay({ result, players, points, cumulativeStats, votes, myId
 }
 
 function WaitingScreen({ gameState, myId, onStartGame, onLeaveClick }: { gameState: GameState; myId: string; onStartGame: () => void; onLeaveClick: () => void }) {
+  useLocale();
   const isHost = gameState.hostId === myId;
   const canAddBot = isHost && gameState.players.length < 6;
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const handleAddBot = () => {
     socket.emit('add-bot', { roomId: gameState.roomId }, () => {});
   };
   const handleRemoveBot = (botName: string) => {
     socket.emit('remove-bot', { roomId: gameState.roomId, botName }, () => {});
   };
-  const handleCopyRoomId = () => {
-    navigator.clipboard.writeText(gameState.roomId).then(() => {
+  const handleCopyRoomId = async () => {
+    const ok = await copyText(gameState.roomId);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    }).catch(() => {});
+    }
+  };
+  const handleShareInviteLink = async () => {
+    const url = `${window.location.origin}/?room=${gameState.roomId}`;
+    const result = await shareOrCopy(url, 'Hit101');
+    if (result === 'shared' || result === 'copied') {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
   };
   return (
     <div className="min-h-screen bg-green-900 flex items-center justify-center p-4">
       <div className="bg-green-800 rounded-2xl p-8 max-w-sm w-full shadow-2xl">
-        <h2 className="text-2xl font-bold text-white text-center mb-1">待機中...</h2>
+        <h2 className="text-2xl font-bold text-white text-center mb-1">{t('wait.title')}</h2>
         <div className="text-center mb-6">
-          <p className="text-green-400 text-sm mb-1">ルームID</p>
-          <button onClick={handleCopyRoomId} className="bg-green-700 hover:bg-green-600 rounded-xl px-6 py-3 inline-flex items-center gap-2 transition-colors" title="クリックしてコピー">
+          <p className="text-green-400 text-sm mb-1">{t('wait.roomIdLabel')}</p>
+          <button onClick={handleCopyRoomId} className="bg-green-700 hover:bg-green-600 rounded-xl px-6 py-3 inline-flex items-center gap-2 transition-colors">
             <span className="font-mono font-bold text-yellow-400 text-3xl tracking-widest">{gameState.roomId}</span>
             <span className="text-green-300 text-sm">{copied ? '✓' : '📋'}</span>
           </button>
-          <p className="text-green-500 text-xs mt-2">{copied ? 'コピーしました！' : 'タップしてIDをコピー'}</p>
+          <p className="text-green-500 text-xs mt-2">{copied ? t('wait.copied') : t('wait.copyHint')}</p>
+          <button
+            onClick={handleShareInviteLink}
+            className="mt-3 w-full bg-yellow-600 hover:bg-yellow-500 active:scale-95 text-white font-bold py-2.5 rounded-xl transition-all text-sm shadow"
+          >
+            {linkCopied ? t('wait.copyLink.done') : t('wait.copyLink')}
+          </button>
         </div>
         <div className="space-y-2 mb-6">
           {gameState.players.map((p, i) => (
             <div key={p.id} className="flex items-center gap-3 bg-green-700/50 rounded-lg px-4 py-3">
-              <span className="text-lg">{p.isBot ? '🤖' : (i === 0 ? '👑' : '👤')}</span>
+              <span className="text-lg">{p.isBot ? '🤖' : (p.avatar || (i === 0 ? '👑' : '👤'))}</span>
               <span className="text-white font-medium flex-1">{p.name}</span>
-              {p.id === myId && <span className="text-green-400 text-xs bg-green-600 px-2 py-0.5 rounded-full">あなた</span>}
+              {p.id === myId && <span className="text-green-400 text-xs bg-green-600 px-2 py-0.5 rounded-full">{t('wait.you')}</span>}
               {p.isBot && isHost && (
                 <button onClick={() => handleRemoveBot(p.name)} className="text-red-400 hover:text-red-300 text-xs font-bold">
                   ✕
@@ -320,29 +346,30 @@ function WaitingScreen({ gameState, myId, onStartGame, onLeaveClick }: { gameSta
             <>
               <button onClick={onStartGame} disabled={gameState.players.length < 2}
                 className="w-full bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 active:scale-95 text-black font-bold py-4 rounded-xl text-lg transition-all">
-                {gameState.players.length < 2 ? '待機中...' : 'ゲーム開始！'}
+                {gameState.players.length < 2 ? t('wait.startWaiting') : t('wait.start')}
               </button>
               <button onClick={handleAddBot} disabled={!canAddBot}
                 className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 active:scale-95 text-white font-bold py-2.5 rounded-xl text-sm transition-all">
-                🤖 Botを追加
+                {t('wait.addBot')}
               </button>
             </>
           )}
           {!isHost && (
-            <p className="text-center text-green-400 py-2">ホストがゲームを開始するのを待っています...</p>
+            <p className="text-center text-green-400 py-2">{t('wait.notHost')}</p>
           )}
           <button onClick={onLeaveClick}
             className="w-full bg-transparent hover:bg-red-900/30 active:scale-95 text-red-400 font-bold py-2 rounded-xl text-sm transition-all border border-red-800">
-            ← ロビーに戻る
+            {t('wait.backToLobby')}
           </button>
         </div>
-        <p className="text-green-600 text-xs text-center mt-3">2〜6人でプレイ可能・Botも参加可能</p>
+        <p className="text-green-600 text-xs text-center mt-3">{t('wait.note')}</p>
       </div>
     </div>
   );
 }
 
 export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck, onStartGame, onVote, onRestart }: Props) {
+  useLocale();
   const { players, currentTotal, currentPlayerIndex, direction, lastPlayedCard, status, deckCount, points, votes, roundResult, roundCount, cumulativeStats, turnDeadline } = gameState;
 
   const [showRules, setShowRules] = useState(false);
@@ -547,7 +574,7 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
     // ラウンド開始通知（シャッフル）
     if (prev.roundCount !== gameState.roundCount && gameState.roundCount > 1 && gameState.status === 'playing') {
       if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
-      setNotification(`ラウンド ${gameState.roundCount} 開始！（順番シャッフル）`);
+      setNotification(t('game.notification.roundStart', { n: gameState.roundCount }));
       notifTimerRef.current = setTimeout(() => setNotification(null), 2500);
     }
 
@@ -557,7 +584,7 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
       const prevP = prev.players.find(pp => pp.id === p.id);
       if (prevP && !prevP.lost && p.lost) {
         if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
-        setNotification(`${p.name} が退出しました`);
+        setNotification(t('game.notification.left', { name: p.name }));
         notifTimerRef.current = setTimeout(() => setNotification(null), 2500);
         break;
       }
@@ -655,7 +682,7 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
 
       {/* 通知バナー */}
       {notification && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-yellow-500 text-black font-bold px-5 py-2.5 rounded-full shadow-lg text-sm whitespace-nowrap">
+        <div className="fixed left-1/2 -translate-x-1/2 z-50 bg-yellow-500 text-black font-bold px-5 py-2.5 rounded-full shadow-lg text-sm whitespace-nowrap" style={{ top: 'calc(1rem + env(safe-area-inset-top))' }}>
           {notification}
         </div>
       )}
@@ -663,29 +690,29 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
       {/* ターンタイマー (ターン中のみ表示) */}
       {turnSecsLeft !== null && status === 'playing' && (
         <div
-          className={`fixed top-10 left-1/2 -translate-x-1/2 z-40 px-3.5 py-1 rounded-full shadow-md text-xs font-bold whitespace-nowrap flex items-center gap-1.5 ${
+          className={`fixed left-1/2 -translate-x-1/2 z-40 px-3.5 py-1 rounded-full shadow-md text-xs font-bold whitespace-nowrap flex items-center gap-1.5 safe-top-10 ${
             turnSecsLeft <= 5
               ? 'bg-red-600 text-white animate-pulse'
               : isMyTurn ? 'bg-yellow-500 text-black' : 'bg-green-700/80 text-green-100'
           }`}
         >
           <span>⏱</span>
-          <span>{isMyTurn ? 'あなたのターン' : `${currentPlayerName}`} — {turnSecsLeft}s</span>
+          <span>{isMyTurn ? t('game.timer.you') : `${currentPlayerName}`} — {turnSecsLeft}s</span>
         </div>
       )}
 
       {/* 接続状態インジケータ */}
-      <div className="fixed top-2.5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5" title={connected ? '接続中' : '切断中'}>
+      <div className="fixed left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 safe-top-2" title={connected ? t('game.connected') : t('game.disconnected')}>
         <span className={`inline-block w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-red-400 animate-pulse'}`} />
-        {!connected && <span className="text-red-400 text-xs font-bold">切断中</span>}
+        {!connected && <span className="text-red-400 text-xs font-bold">{t('game.disconnected')}</span>}
       </div>
 
       {/* ルールボタン・ミュートボタン */}
-      <div className="fixed top-2 right-2 z-30 flex items-center gap-1.5">
+      <div className="fixed z-30 flex items-center gap-1.5 safe-top-2 safe-right-2">
         <button
           onClick={() => setMuted(toggleMute())}
           className="bg-green-700 hover:bg-green-600 text-white text-xs font-bold w-7 h-7 rounded-full shadow flex items-center justify-center"
-          title={muted ? '音をオンにする' : '音をオフにする'}
+          title={muted ? t('game.muted') : t('game.unmuted')}
         >
           {muted ? '🔇' : '🔊'}
         </button>
@@ -693,7 +720,7 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
           onClick={() => setShowRules(true)}
           className="bg-green-700 hover:bg-green-600 text-white text-base font-bold px-4 py-2 rounded-full shadow"
         >
-          ？ルール
+          {t('game.rules')}
         </button>
       </div>
 
@@ -717,7 +744,7 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
       {/* ゲーム情報（中央） */}
       <div className="flex items-center justify-center px-1 py-10 sm:py-12">
         <div className="text-center space-y-2 sm:space-y-3 w-full">
-          <p className="text-green-500 text-xs uppercase tracking-widest">ラウンド {roundCount} ｜ 合計</p>
+          <p className="text-green-500 text-xs uppercase tracking-widest">{t('game.round', { n: roundCount })} ｜ {t('game.totalLabel')}</p>
 
           {/* 合計 + 最後のカード + 山札 */}
           <div className="relative flex items-center justify-center gap-3 sm:gap-6">
@@ -729,7 +756,7 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
                 <CardComponent card={lastPlayedCard} />
                 <p className="text-green-300 text-xs mt-2">
                   {lastPlayedCard.playerName}
-                  {lastPlayedCard.fromDeck && <span className="ml-1 text-blue-300">🎴引いた</span>}
+                  {lastPlayedCard.fromDeck && <span className="ml-1 text-blue-300">{t('game.fromDeck')}</span>}
                 </p>
               </div>
             )}
@@ -744,7 +771,7 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
               ref={deckRef}
               onClick={isMyTurn ? onDrawFromDeck : undefined}
               disabled={!isMyTurn}
-              aria-label={`山札からカードを引く（残り${deckCount}枚）`}
+              aria-label={t('game.deck.aria', { n: deckCount })}
               className={`relative flex flex-col items-center gap-1 transition-all duration-150 ${isMyTurn ? 'active:scale-95 cursor-pointer' : 'cursor-default opacity-60'}`}
             >
               {/* カードの重なり（奥行き表現） */}
@@ -759,21 +786,21 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
                   <span className="text-4xl sm:text-4xl">?</span>
                 </div>
               </div>
-              <p className="text-green-300 text-xs mt-2">{deckCount}枚</p>
+              <p className="text-green-300 text-xs mt-2">{t('game.deck.cards', { n: deckCount })}</p>
             </button>
           </div>
 
           {isMyTurn ? (
             <div className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm bg-yellow-500 text-black">
-              🎯 あなたのターン！
+              {t('game.yourTurn')}
             </div>
           ) : isBotTurn ? (
             <div className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm bg-indigo-500/70 text-white">
-              🤖 {currentPlayerName} が考え中...
+              {t('game.botThinking', { name: currentPlayerName })}
             </div>
           ) : status === 'playing' ? (
             <div className="inline-block px-3 sm:px-4 py-1.5 sm:py-2 rounded-full font-bold text-xs sm:text-sm bg-green-700/50 text-green-300">
-              {currentPlayerName} のターン
+              {t('game.othersTurn', { name: currentPlayerName })}
             </div>
           ) : null}
         </div>
@@ -782,13 +809,13 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
       {/* 自分の手札（下） */}
       <div className="px-2 sm:px-4 pt-10 sm:pt-10 border-t border-green-800 pb-3 sm:pb-4">
         <div className="flex items-center justify-center gap-2 sm:gap-3 mb-2 sm:mb-3">
-          {isMyTurn && <p className="text-yellow-400 text-xs">カードをタップして出す</p>}
-          <span className="text-base sm:text-lg text-green-300 font-bold">{me?.name}</span>
+          {isMyTurn && <p className="text-yellow-400 text-xs">{t('game.tapToPlay')}</p>}
+          <span className="text-base sm:text-lg text-green-300 font-bold">{me?.avatar ? `${me.avatar} ` : ''}{me?.name}</span>
           <span className={`text-base sm:text-lg font-bold px-3 py-1 rounded-full ${myPoints >= 0 ? 'text-yellow-300 bg-yellow-900/40' : 'text-red-400 bg-red-900/40'}`}>
             {myPoints >= 0 ? '+' : ''}{myPoints}pt
           </span>
           {myCumulative != null && (
-            <span className="text-xs text-yellow-400">累計 {myCumulative.totalPoints >= 0 ? '+' : ''}{myCumulative.totalPoints}pt</span>
+            <span className="text-xs text-yellow-400">{t('game.cumulativeShort', { points: (myCumulative.totalPoints >= 0 ? '+' : '') + myCumulative.totalPoints })}</span>
           )}
         </div>
         <div ref={handRef} className="flex justify-center gap-3 sm:gap-4 flex-wrap pb-1 sm:pb-2">
@@ -807,9 +834,9 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
       {/* 退出ボタン */}
       <button
         onClick={() => setShowLeaveConfirm(true)}
-        className="fixed top-2 left-2 z-30 bg-green-700 hover:bg-green-600 text-white text-base font-bold px-4 py-2 rounded-full shadow"
+        className="fixed z-30 bg-green-700 hover:bg-green-600 text-white text-base font-bold px-4 py-2 rounded-full shadow safe-top-2 safe-left-2"
       >
-        退出
+        {t('game.exit')}
       </button>
 
       {/* ルールモーダル */}
@@ -877,7 +904,7 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
                 animation: 'round-text-pop 2.2s ease-out forwards',
               }}
             >
-              {roundEffect === '101' ? '🎯 101！' : roundEffect === 'joker101' ? '🃏 JOKER！' : '💥 BURST!'}
+              {roundEffect === '101' ? t('game.effect.101') : roundEffect === 'joker101' ? t('game.effect.joker101') : t('game.effect.bust')}
             </p>
           </div>
         </>
@@ -897,7 +924,7 @@ export default function GameBoard({ gameState, myId, onPlayCard, onDrawFromDeck,
               animation: 'action-text-pop 1.4s ease-out forwards',
             }}
           >
-            {actionEffect === 'skip' ? '⏭ スキップ' : '🔄 リターン'}
+            {actionEffect === 'skip' ? t('game.effect.skip') : t('game.effect.return')}
           </p>
         </div>
       )}

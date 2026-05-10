@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { socket } from '../socket';
 import { LeaderboardResult } from '../types';
+import { useLocale, t, getLocale } from '../i18n';
 
 interface Props {
   myUUID: string;
@@ -10,6 +11,7 @@ interface Props {
 const PAGE_SIZE = 10;
 
 export default function LeaderboardModal({ myUUID, onClose }: Props) {
+  useLocale();
   const [result, setResult] = useState<LeaderboardResult>({ top: [], entries: [], total: 0, limit: PAGE_SIZE, offset: 0, myEntry: null });
   const [page, setPage] = useState(0);
   const [minGames, setMinGames] = useState(0);
@@ -41,15 +43,18 @@ export default function LeaderboardModal({ myUUID, onClose }: Props) {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const entries = result.entries ?? result.top;
 
-  const sinceOptions: [number, string][] = [[0, '全期間'], [7, '7日'], [30, '30日']];
+  const sinceOptions: [number, string][] = [[0, t('lb.since.all')], [7, t('lb.since.7')], [30, t('lb.since.30')]];
   const now = new Date();
-  const monthLabel = `${now.getFullYear()}年${now.getMonth() + 1}月`;
+  const locale = getLocale();
+  const monthLabel = locale === 'en'
+    ? now.toLocaleString('en-US', { month: 'long', year: 'numeric' })
+    : `${now.getFullYear()}年${now.getMonth() + 1}月`;
 
   return (
-    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-label="ランキング">
+    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
       <div className="bg-green-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xl font-bold text-yellow-400">🏆 ランキング {period === 'month' && <span className="text-sm text-yellow-200 font-normal">({monthLabel})</span>}</h2>
+          <h2 className="text-xl font-bold text-yellow-400">{t('lb.title')} {period === 'month' && <span className="text-sm text-yellow-200 font-normal">{t('lb.month', { month: monthLabel })}</span>}</h2>
           <button onClick={onClose} className="text-green-400 hover:text-white font-bold text-xl">✕</button>
         </div>
 
@@ -58,12 +63,12 @@ export default function LeaderboardModal({ myUUID, onClose }: Props) {
             <button
               onClick={() => { setPeriod('all'); setPage(0); }}
               className={`flex-1 py-1 rounded ${period === 'all' ? 'bg-yellow-500 text-black font-bold' : 'bg-green-700 text-green-300'}`}>
-              累計
+              {t('lb.tab.all')}
             </button>
             <button
               onClick={() => { setPeriod('month'); setPage(0); }}
               className={`flex-1 py-1 rounded ${period === 'month' ? 'bg-yellow-500 text-black font-bold' : 'bg-green-700 text-green-300'}`}>
-              今月
+              {t('lb.tab.month')}
             </button>
           </div>
           {period === 'all' && (
@@ -81,13 +86,13 @@ export default function LeaderboardModal({ myUUID, onClose }: Props) {
           <div className="flex gap-1 text-xs">
             <button
               onClick={() => { setSort('points'); setPage(0); }}
-              className={`flex-1 py-1 rounded ${sort === 'points' ? 'bg-yellow-500 text-black font-bold' : 'bg-green-700 text-green-300'}`}>ポイント順</button>
+              className={`flex-1 py-1 rounded ${sort === 'points' ? 'bg-yellow-500 text-black font-bold' : 'bg-green-700 text-green-300'}`}>{t('lb.sort.points')}</button>
             <button
               onClick={() => { setSort('games'); setPage(0); }}
-              className={`flex-1 py-1 rounded ${sort === 'games' ? 'bg-yellow-500 text-black font-bold' : 'bg-green-700 text-green-300'}`}>試合数順</button>
+              className={`flex-1 py-1 rounded ${sort === 'games' ? 'bg-yellow-500 text-black font-bold' : 'bg-green-700 text-green-300'}`}>{t('lb.sort.games')}</button>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <label className="text-green-300">最低試合数</label>
+            <label className="text-green-300">{t('lb.minGames')}</label>
             <input
               type="number" min={0} max={10000} value={minGames}
               onChange={e => { setMinGames(Math.max(0, Number(e.target.value) || 0)); setPage(0); }}
@@ -97,15 +102,15 @@ export default function LeaderboardModal({ myUUID, onClose }: Props) {
 
         {fetchError ? (
           <div className="text-center py-4">
-            <p className="text-red-400 text-sm mb-2">データの取得に失敗しました</p>
+            <p className="text-red-400 text-sm mb-2">{t('lb.fetchError')}</p>
             <button onClick={fetchPage} className="bg-green-700 hover:bg-green-600 text-white text-sm font-bold px-4 py-2 rounded-lg transition">
-              再試行
+              {t('lb.retry')}
             </button>
           </div>
         ) : loading ? (
-          <p className="text-green-400 text-center text-sm py-4">読み込み中...</p>
+          <p className="text-green-400 text-center text-sm py-4">{t('lb.loading')}</p>
         ) : entries.length === 0 ? (
-          <p className="text-green-400 text-center text-sm py-4">該当するプレイヤーがいません</p>
+          <p className="text-green-400 text-center text-sm py-4">{t('lb.empty')}</p>
         ) : (
           <div className="space-y-2">
             {entries.map((entry, i) => {
@@ -118,7 +123,7 @@ export default function LeaderboardModal({ myUUID, onClose }: Props) {
                     <span className="text-lg w-8 shrink-0">{medal}</span>
                     <div className="min-w-0">
                       <p className={`font-bold text-sm truncate ${rank === 1 ? 'text-yellow-300' : 'text-white'}`}>{entry.name}</p>
-                      <p className="text-green-400 text-xs">{entry.gamesPlayed}ゲーム</p>
+                      <p className="text-green-400 text-xs">{entry.gamesPlayed} {t('lb.gamesUnit')}</p>
                     </div>
                   </div>
                   <span className={`font-bold shrink-0 ${entry.totalPoints >= 0 ? 'text-green-300' : 'text-red-400'}`}>
@@ -131,7 +136,7 @@ export default function LeaderboardModal({ myUUID, onClose }: Props) {
               <>
                 <div className="flex items-center gap-2 py-1">
                   <div className="flex-1 border-t border-green-600" />
-                  <span className="text-green-500 text-xs">あなたの順位</span>
+                  <span className="text-green-500 text-xs">{t('lb.yourRank')}</span>
                   <div className="flex-1 border-t border-green-600" />
                 </div>
                 <div className="flex items-center justify-between rounded-xl px-4 py-2.5 bg-green-700/50 ring-2 ring-yellow-400">
@@ -139,7 +144,7 @@ export default function LeaderboardModal({ myUUID, onClose }: Props) {
                     <span className="text-sm font-bold text-white w-8">{result.myEntry.rank}.</span>
                     <div>
                       <p className="font-bold text-sm text-white">{result.myEntry.name}</p>
-                      <p className="text-green-400 text-xs">{result.myEntry.gamesPlayed}ゲーム</p>
+                      <p className="text-green-400 text-xs">{result.myEntry.gamesPlayed} {t('lb.gamesUnit')}</p>
                     </div>
                   </div>
                   <span className={`font-bold ${result.myEntry.totalPoints >= 0 ? 'text-green-300' : 'text-red-400'}`}>
@@ -154,10 +159,10 @@ export default function LeaderboardModal({ myUUID, onClose }: Props) {
         {totalPages > 1 && (
           <div className="flex items-center justify-between gap-2 mt-4">
             <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-              className="px-3 py-2 bg-green-700 hover:bg-green-600 disabled:opacity-30 rounded text-white text-sm">← 前</button>
-            <span className="text-green-300 text-xs">{page + 1} / {totalPages} <span className="text-green-500">(計{total}人)</span></span>
+              className="px-3 py-2 bg-green-700 hover:bg-green-600 disabled:opacity-30 rounded text-white text-sm">{t('lb.prev')}</button>
+            <span className="text-green-300 text-xs">{t('lb.pageInfo', { page: page + 1, total: totalPages, count: total })}</span>
             <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
-              className="px-3 py-2 bg-green-700 hover:bg-green-600 disabled:opacity-30 rounded text-white text-sm">次 →</button>
+              className="px-3 py-2 bg-green-700 hover:bg-green-600 disabled:opacity-30 rounded text-white text-sm">{t('lb.next')}</button>
           </div>
         )}
       </div>

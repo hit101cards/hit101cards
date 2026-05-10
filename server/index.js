@@ -7,7 +7,21 @@ const {
   getAllStats, resetAllStats, getSummaryStats, resetPlayerStats,
   banUUID, unbanUUID, isBanned, getBannedList,
   recordCardPlay, recordGameStart, getCardUsageStats, getHourlyActivity, getTypeStats,
+  claimDailyBonusIfEligible,
 } = require('./playerStats');
+
+// デイリーボーナス: 当日初参加なら +5pt を付与してクライアントに通知
+const DAILY_BONUS_AMOUNT = 5;
+function tryGrantDailyBonus(socket, uuid, name) {
+  if (!uuid) return;
+  // プレイヤーレコードを確実に作成 (delta=0 で upsert)
+  updateTotalPoints(uuid, name, 0);
+  if (claimDailyBonusIfEligible(uuid)) {
+    updateTotalPoints(uuid, name, DAILY_BONUS_AMOUNT);
+    socket.emit('daily-bonus', { amount: DAILY_BONUS_AMOUNT });
+    logAudit('daily-bonus', { uuid: uuid.slice(0, 8), amount: DAILY_BONUS_AMOUNT });
+  }
+}
 const { decideBotMove, decideDrawnCardChoice } = require('./botAi');
 const { logAudit, isSuspiciousBurst, recordAction, clearAction } = require('./audit');
 
@@ -836,6 +850,11 @@ function startMatchCountdown() {
       matchReady.clear();
       const roomId = genRoomId();
       const gameState = createGame(matched.map(p => ({ id: p.id, name: p.name })));
+      // アバターをプレイヤーオブジェクトに反映 (マッチメイキングルーム用)
+      gameState.players.forEach((p) => {
+        const m = matched.find((mm) => mm.name === p.name);
+        if (m) p.avatar = m.avatar || '🃏';
+      });
       const uuidMap = {};
       const cumulativeStats = {};
       matched.forEach(p => {
@@ -1050,19 +1069,20 @@ function applyRoundEndStats(room) {
 io.on('connection', (socket) => {
   console.log('接続:', socket.id);
 
-  socket.on('create-room', ({ playerName, uuid }, cb) => {
+  socket.on('create-room', ({ playerName, uuid, avatar }, cb) => {
     const v = validateName(playerName);
     if (!v.ok) return cb({ success: false, error: v.error });
     if (uuid && !isValidUUID(uuid)) return cb({ success: false, error: '無効なアカウント情報です' });
     if (uuid && isBanned(uuid)) return cb({ success: false, error: 'このアカウントはご利用いただけません' });
     const name = v.name;
+    const safeAvatar = (typeof avatar === 'string' && avatar.length <= 4) ? avatar : '🃏';
     const roomId = genRoomId();
     const room = {
       id: roomId,
       hostId: socket.id,
       status: 'waiting',
       createdAt: Date.now(),
-      players: [{ id: socket.id, name, hand: [], lost: false, disconnected: false }],
+      players: [{ id: socket.id, name, avatar: safeAvatar, hand: [], lost: false, disconnected: false }],
       deck: [], discardPile: [],
       currentTotal: 0, currentPlayerIndex: 0, direction: 1,
       previousPlayerName: null, lastPlayedCard: null, pendingDrawnCard: null,
@@ -1073,10 +1093,12 @@ io.on('connection', (socket) => {
     socket.join(roomId);
     socket.data.roomId = roomId;
     socket.data.playerName = name;
+    socket.data.uuid = uuid;
+    tryGrantDailyBonus(socket, uuid, name);
     cb({ success: true, roomId, state: publicState(room, socket.id) });
   });
 
-  socket.on('join-room', ({ roomId, playerName, uuid }, cb) => {
+  socket.on('join-room', ({ roomId, playerName, uuid, avatar }, cb) => {
     if (typeof roomId !== 'string' || !/^[A-Z0-9]{4,8}$/i.test(roomId)) return cb({ success: false, error: '無効なルームIDです' });
     roomId = roomId.toUpperCase();
     const v = validateName(playerName);
@@ -1084,17 +1106,20 @@ io.on('connection', (socket) => {
     if (uuid && !isValidUUID(uuid)) return cb({ success: false, error: '無効なアカウント情報です' });
     if (uuid && isBanned(uuid)) return cb({ success: false, error: 'このアカウントはご利用いただけません' });
     const name = v.name;
+    const safeAvatar = (typeof avatar === 'string' && avatar.length <= 4) ? avatar : '🃏';
     const room = rooms.get(roomId);
     if (!room) return cb({ success: false, error: 'ルームが見つかりません' });
     if (room.status !== 'waiting') return cb({ success: false, error: 'ゲームはすでに開始されています' });
     if (room.players.length >= 6) return cb({ success: false, error: 'ルームが満員です（最大6人）' });
     if (room.players.find(p => p.name === name)) return cb({ success: false, error: 'その名前はすでに使われています' });
 
-    room.players.push({ id: socket.id, name, hand: [], lost: false, disconnected: false });
+    room.players.push({ id: socket.id, name, avatar: safeAvatar, hand: [], lost: false, disconnected: false });
     room.points[name] = 0;
     socket.join(roomId);
     socket.data.roomId = roomId;
     socket.data.playerName = name;
+    socket.data.uuid = uuid;
+    tryGrantDailyBonus(socket, uuid, name);
     broadcastToRoom(room);
     cb({ success: true, roomId, state: publicState(room, socket.id) });
   });
@@ -1138,7 +1163,7 @@ io.on('connection', (socket) => {
     console.log(`再接続: ${playerName} (${roomId})`);
   });
 
-  socket.on('join-matchmaking', ({ playerName, uuid }, cb) => {
+  socket.on('join-matchmaking', ({ playerName, uuid, avatar }, cb) => {
     // 名前バリデーション
     const v = validateName(playerName);
     if (!v.ok) return cb?.({ success: false, error: v.error });
@@ -1191,9 +1216,13 @@ io.on('connection', (socket) => {
         return cb?.({ success: false, error: '既に別の端末でプレイ中です' });
       }
     }
-    matchQueue.push({ id: socket.id, name, uuid: uuid || null });
+    const safeAvatar = (typeof avatar === 'string' && avatar.length <= 4) ? avatar : '🃏';
+    matchQueue.push({ id: socket.id, name, uuid: uuid || null, avatar: safeAvatar });
     console.log(`[matchmaking] 参加: ${name} (uuid: ${uuid ? uuid.slice(0, 8) + '...' : 'なし'})`);
     socket.data.inMatchmaking = true;
+    socket.data.uuid = uuid;
+    socket.data.avatar = safeAvatar;
+    tryGrantDailyBonus(socket, uuid, name);
     socket.data.playerName = name;
     socket.data.matchUUID = uuid || null;
 

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { socket } from './socket';
 import { GameState, Card, CumulativeStat, MatchmakingPlayer } from './types';
+import { useLocale, t } from './i18n';
 import Lobby from './components/Lobby';
 import GameBoard from './components/GameBoard';
 import ChoiceModal from './components/ChoiceModal';
@@ -50,6 +51,7 @@ function loadSession(): { playerName: string; roomId: string } | null {
 }
 
 export default function App() {
+  useLocale();
   const [myId, setMyId] = useState('');
   const [roomId, setRoomId] = useState('');
   const [phase, setPhase] = useState<'lobby' | 'game' | 'reconnecting' | 'matchmaking'>('reconnecting');
@@ -69,6 +71,8 @@ export default function App() {
   const [actionInProgress, setActionInProgress] = useState(false); // 連打防止
   const [disconnectedAt, setDisconnectedAtState] = useState<number | null>(null);
   const [reconnectCountdown, setReconnectCountdown] = useState(60);
+  const [dailyBonus, setDailyBonus] = useState<number | null>(null);
+  const dailyBonusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const disconnectedAtRef = useRef<number | null>(null);
   const phaseRef = useRef<string>('reconnecting');
 
@@ -156,7 +160,7 @@ export default function App() {
       }
     });
     socket.on('disconnect', () => {
-      setError('サーバーとの接続が切れました。再接続中...');
+      setError(t('error.disconnected'));
       setPendingCard(null); // 切断時にpendingCardをクリア
       if (phaseRef.current === 'game') {
         const now = Date.now();
@@ -200,6 +204,14 @@ export default function App() {
       if (typeof cds === 'number') setCountdownSeconds(cds);
       if (mqPlayers) setMatchPlayers(mqPlayers);
     });
+    socket.on('daily-bonus', ({ amount }: { amount: number }) => {
+      setDailyBonus(amount);
+      if (dailyBonusTimerRef.current) clearTimeout(dailyBonusTimerRef.current);
+      dailyBonusTimerRef.current = setTimeout(() => {
+        setDailyBonus(null);
+        dailyBonusTimerRef.current = null;
+      }, 4500);
+    });
     socket.on('matchmaking-matched', ({ roomId: rid, state }: { roomId: string; state: GameState }) => {
       setMyId(socket.id!);
       setRoomId(rid);
@@ -218,18 +230,19 @@ export default function App() {
       socket.off('return-to-matchmaking');
       socket.off('matchmaking-update');
       socket.off('matchmaking-matched');
+      socket.off('daily-bonus');
     };
   }, []);
 
-  const handleCreateRoom = useCallback((name: string) => {
+  const handleCreateRoom = useCallback((name: string, avatar: string) => {
     if (actionInProgress) return;
     setActionInProgress(true);
     setError('');
     if (!socket.connected) socket.connect();
-    socket.timeout(5000).emit('create-room', { playerName: name, uuid: MY_UUID },
+    socket.timeout(5000).emit('create-room', { playerName: name, uuid: MY_UUID, avatar },
       (err: Error | null, res: { success: boolean; error?: string; roomId?: string; state?: GameState }) => {
         setActionInProgress(false);
-        if (err) { setError('サーバーに接続できませんでした。サーバーが起動しているか確認してください。'); return; }
+        if (err) { setError(t('error.connect')); return; }
         if (res.success && res.state && res.roomId) {
           setMyId(socket.id!);
           setRoomId(res.roomId);
@@ -237,20 +250,20 @@ export default function App() {
           saveSession(name, res.roomId);
           setPhase('game');
         } else {
-          setError(res.error || 'エラーが発生しました');
+          setError(res.error || t('error.generic'));
         }
       });
   }, [actionInProgress]);
 
-  const handleJoinRoom = useCallback((name: string, rid: string) => {
+  const handleJoinRoom = useCallback((name: string, rid: string, avatar: string) => {
     if (actionInProgress) return;
     setActionInProgress(true);
     setError('');
     if (!socket.connected) socket.connect();
-    socket.timeout(5000).emit('join-room', { playerName: name, roomId: rid, uuid: MY_UUID },
+    socket.timeout(5000).emit('join-room', { playerName: name, roomId: rid, uuid: MY_UUID, avatar },
       (err: Error | null, res: { success: boolean; error?: string; roomId?: string; state?: GameState }) => {
         setActionInProgress(false);
-        if (err) { setError('サーバーに接続できませんでした。サーバーが起動しているか確認してください。'); return; }
+        if (err) { setError(t('error.connect')); return; }
         if (res.success && res.state && res.roomId) {
           setMyId(socket.id!);
           setRoomId(res.roomId);
@@ -258,12 +271,12 @@ export default function App() {
           saveSession(name, res.roomId);
           setPhase('game');
         } else {
-          setError(res.error || 'エラーが発生しました');
+          setError(res.error || t('error.generic'));
         }
       });
   }, [actionInProgress]);
 
-  const handleJoinMatchmaking = useCallback((name: string) => {
+  const handleJoinMatchmaking = useCallback((name: string, avatar: string) => {
     if (actionInProgress) return;
     setActionInProgress(true);
     setError('');
@@ -272,17 +285,17 @@ export default function App() {
     socket.emit('get-player-stats', { uuid: MY_UUID }, (stats: CumulativeStat | null) => {
       setMyStats(stats);
     });
-    socket.timeout(5000).emit('join-matchmaking', { playerName: name, uuid: MY_UUID }, (err: Error | null, res: { success: boolean; error?: string; count?: number }) => {
+    socket.timeout(5000).emit('join-matchmaking', { playerName: name, uuid: MY_UUID, avatar }, (err: Error | null, res: { success: boolean; error?: string; count?: number }) => {
       setActionInProgress(false);
       if (err) {
-        setError('サーバーに接続できませんでした。サーバーが起動しているか確認してください。');
+        setError(t('error.connect'));
         return;
       }
       if (res.success) {
         setMatchCount(res.count || 1);
         setPhase('matchmaking');
       } else {
-        setError(res.error || 'エラーが発生しました');
+        setError(res.error || t('error.generic'));
       }
     });
   }, [actionInProgress]);
@@ -353,9 +366,9 @@ export default function App() {
 
   const handleReadyMatchmaking = useCallback(() => {
     socket.timeout(5000).emit('ready-matchmaking', (err: Error | null, res: { success: boolean; error?: string }) => {
-      if (err) { setError('接続エラーが発生しました'); return; }
+      if (err) { setError(t('error.connectErr')); return; }
       if (res.success) setIsReady(true);
-      else setError(res.error || 'エラーが発生しました');
+      else setError(res.error || t('error.generic'));
     });
   }, []);
 
@@ -371,13 +384,13 @@ export default function App() {
 
   const handleStartGame = useCallback(() => {
     socket.emit('start-game', { roomId }, (res: { success: boolean; error?: string }) => {
-      if (!res.success) setError(res.error || 'エラーが発生しました');
+      if (!res.success) setError(res.error || t('error.generic'));
     });
   }, [roomId]);
 
   const handleVote = useCallback((vote: 'continue' | 'quit') => {
     socket.emit('vote', { roomId, vote }, (res: { success: boolean; error?: string }) => {
-      if (!res.success) setError(res.error || 'エラーが発生しました');
+      if (!res.success) setError(res.error || t('error.generic'));
     });
   }, [roomId]);
 
@@ -387,14 +400,14 @@ export default function App() {
       return;
     }
     socket.emit('play-card', { roomId, cardId: card.id }, (res: { success: boolean; error?: string }) => {
-      if (!res.success) setError(res.error || 'エラーが発生しました');
+      if (!res.success) setError(res.error || t('error.generic'));
     });
   }, [roomId]);
 
   const handleDrawFromDeck = useCallback(() => {
     socket.emit('draw-from-deck', { roomId },
       (res: { success: boolean; error?: string; card?: Card; needsChoice?: boolean }) => {
-        if (!res.success) { setError(res.error || 'エラーが発生しました'); return; }
+        if (!res.success) { setError(res.error || t('error.generic')); return; }
         if (res.needsChoice && res.card) {
           setPendingCard({ card: res.card, fromDeck: true });
         }
@@ -405,12 +418,12 @@ export default function App() {
     if (!pendingCard) return;
     if (pendingCard.fromDeck) {
       socket.emit('play-drawn-card', { roomId, choice }, (res: { success: boolean; error?: string }) => {
-        if (!res.success) setError(res.error || 'エラーが発生しました');
+        if (!res.success) setError(res.error || t('error.generic'));
       });
     } else {
       socket.emit('play-card', { roomId, cardId: pendingCard.card.id, choice },
         (res: { success: boolean; error?: string }) => {
-          if (!res.success) setError(res.error || 'エラーが発生しました');
+          if (!res.success) setError(res.error || t('error.generic'));
         });
     }
     setPendingCard(null);
@@ -422,8 +435,8 @@ export default function App() {
       <div className="min-h-screen bg-green-900 flex items-center justify-center">
         <div className="text-center">
           <div className="text-5xl mb-4 animate-spin">🃏</div>
-          <p className="text-white text-lg">接続中...</p>
-          <p className="text-green-500 text-xs mt-2">前回のゲームに再接続しています</p>
+          <p className="text-white text-lg">{t('splash.connecting')}</p>
+          <p className="text-green-500 text-xs mt-2">{t('splash.reconnecting')}</p>
         </div>
       </div>
     );
@@ -443,32 +456,32 @@ export default function App() {
       <div className="min-h-screen bg-green-900 flex items-center justify-center p-4">
         <div className="bg-green-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center">
           <div className="text-5xl mb-3 animate-spin">🃏</div>
-          <h2 className="text-2xl font-bold text-white mb-1">マッチング中...</h2>
-          <p className="text-green-400 text-sm mb-3">4人集まると自動でゲームが始まります</p>
+          <h2 className="text-2xl font-bold text-white mb-1">{t('mm.title')}</h2>
+          <p className="text-green-400 text-sm mb-3">{t('mm.subtitle')}</p>
 
           {/* 自分の累計ポイント */}
           {myStats && (
             <div className="bg-green-700/50 rounded-xl px-4 py-2 mb-3 text-left">
-              <p className="text-green-400 text-xs mb-1">あなたの累計</p>
-              <p className="text-yellow-300 font-bold">{myStats.totalPoints >= 0 ? '+' : ''}{myStats.totalPoints}pt <span className="text-green-400 text-xs font-normal">{myStats.gamesPlayed}ゲーム</span></p>
+              <p className="text-green-400 text-xs mb-1">{t('mm.yourCumulative')}</p>
+              <p className="text-yellow-300 font-bold">{myStats.totalPoints >= 0 ? '+' : ''}{myStats.totalPoints}pt <span className="text-green-400 text-xs font-normal">{myStats.gamesPlayed} {t('mm.gamesUnit')}</span></p>
             </div>
           )}
 
           <div className="bg-green-700 rounded-xl px-6 py-3 mb-3">
             <p className="text-yellow-400 text-4xl font-bold">{matchCount} / 4</p>
-            <p className="text-green-400 text-xs mt-1">人が待機中</p>
+            <p className="text-green-400 text-xs mt-1">{t('mm.waiting')}</p>
           </div>
 
           {/* 参加者リスト */}
           {matchPlayers.length > 0 && (
             <div className="bg-green-700/40 rounded-xl px-4 py-3 mb-3 text-left">
-              <p className="text-green-400 text-xs font-bold mb-2 uppercase tracking-wider">参加者</p>
+              <p className="text-green-400 text-xs font-bold mb-2 uppercase tracking-wider">{t('mm.playerList')}</p>
               <div className="space-y-1">
                 {matchPlayers.map((p, i) => (
                   <div key={i} className="flex items-center justify-between">
                     <span className="text-white text-sm">{p.name}</span>
                     <span className="text-yellow-300 text-xs font-bold">
-                      {p.stats ? `${p.stats.totalPoints >= 0 ? '+' : ''}${p.stats.totalPoints}pt` : '初回'}
+                      {p.stats ? `${p.stats.totalPoints >= 0 ? '+' : ''}${p.stats.totalPoints}pt` : t('mm.firstTime')}
                     </span>
                   </div>
                 ))}
@@ -480,23 +493,23 @@ export default function App() {
             <div className="mb-3 space-y-2">
               {displayCountdown !== null ? (
                 <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-xl px-4 py-3">
-                  <p className="text-yellow-300 font-bold text-lg">{displayCountdown}秒後にゲームが始まります！</p>
-                  <p className="text-yellow-400 text-xs mt-1">準備完了 {matchReadyCount} / {matchCount} 人</p>
+                  <p className="text-yellow-300 font-bold text-lg">{t('mm.countdown', { seconds: displayCountdown })}</p>
+                  <p className="text-yellow-400 text-xs mt-1">{t('mm.ready', { ready: matchReadyCount, total: matchCount })}</p>
                 </div>
               ) : (
-                <p className="text-green-400 text-xs">準備完了 {matchReadyCount} / {matchCount} 人</p>
+                <p className="text-green-400 text-xs">{t('mm.ready', { ready: matchReadyCount, total: matchCount })}</p>
               )}
               {!isReady ? (
                 <button onClick={handleReadyMatchmaking} className="w-full bg-yellow-500 hover:bg-yellow-400 active:scale-95 text-black font-bold py-3 rounded-xl transition-all">
-                  ゲームを開始する
+                  {t('mm.startButton')}
                 </button>
               ) : displayCountdown !== null ? (
                 <div className="w-full bg-green-600 text-white font-bold py-3 rounded-xl text-center">
-                  ✓ 準備完了
+                  {t('mm.readyDone')}
                 </div>
               ) : (
                 <button onClick={handleUnreadyMatchmaking} className="w-full bg-green-600 hover:bg-green-500 active:scale-95 text-white font-bold py-3 rounded-xl transition-all">
-                  ✓ 準備完了（取り消す）
+                  {t('mm.unready')}
                 </button>
               )}
             </div>
@@ -504,11 +517,11 @@ export default function App() {
 
           <div className="space-y-2">
             <button onClick={handleOpenLeaderboard} className="w-full bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-bold py-2.5 rounded-xl transition-all text-sm">
-              🏆 ランキングを見る
+              {t('lobby.leaderboard')}
             </button>
             {displayCountdown === null && (
               <button onClick={() => setShowLeaveMatchmakingConfirm(true)} className="w-full bg-gray-600 hover:bg-gray-500 active:scale-95 text-white font-bold py-2.5 rounded-xl transition-all text-sm">
-                退出する
+                {t('mm.leave')}
               </button>
             )}
           </div>
@@ -521,14 +534,14 @@ export default function App() {
         {showLeaveMatchmakingConfirm && (
           <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
             <div className="bg-green-800 rounded-2xl p-6 max-w-xs w-full shadow-2xl text-center">
-              <p className="text-xl font-bold text-white mb-2">マッチングを退出しますか？</p>
-              <p className="text-green-400 text-sm mb-4">待機列から抜けてロビーに戻ります</p>
+              <p className="text-xl font-bold text-white mb-2">{t('mm.leaveConfirm.title')}</p>
+              <p className="text-green-400 text-sm mb-4">{t('mm.leaveConfirm.body')}</p>
               <div className="flex gap-3">
                 <button onClick={() => setShowLeaveMatchmakingConfirm(false)} className="flex-1 bg-green-700 hover:bg-green-600 active:scale-95 text-white font-bold py-3 rounded-xl transition-all">
-                  キャンセル
+                  {t('mm.leaveConfirm.cancel')}
                 </button>
                 <button onClick={() => { setShowLeaveMatchmakingConfirm(false); handleLeaveMatchmaking(); }} className="flex-1 bg-red-600 hover:bg-red-500 active:scale-95 text-white font-bold py-3 rounded-xl transition-all">
-                  退出する
+                  {t('mm.leave')}
                 </button>
               </div>
             </div>
@@ -577,26 +590,47 @@ export default function App() {
         <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-50 p-4">
           <div className="bg-green-800 rounded-2xl p-8 max-w-sm w-full shadow-2xl text-center">
             <div className="text-5xl mb-4">🔌</div>
-            <h2 className="text-xl font-bold text-white mb-2">接続が切れました</h2>
-            <p className="text-green-400 text-sm mb-4">再接続を試みています...</p>
+            <h2 className="text-xl font-bold text-white mb-2">{t('disconnect.title')}</h2>
+            <p className="text-green-400 text-sm mb-4">{t('disconnect.subtitle')}</p>
             <div className="bg-green-700 rounded-xl px-6 py-4 mb-5">
               <p className={`text-5xl font-bold tabular-nums ${reconnectCountdown <= 10 ? 'text-red-400' : 'text-yellow-300'}`}>
                 {reconnectCountdown}
               </p>
-              <p className="text-green-400 text-xs mt-1">秒以内に接続できないと脱落します</p>
+              <p className="text-green-400 text-xs mt-1">{t('disconnect.note')}</p>
             </div>
             <button
               onClick={() => socket.connect()}
               className="w-full bg-yellow-500 hover:bg-yellow-400 active:scale-95 text-black font-bold py-3 rounded-xl transition-all"
             >
-              今すぐ再接続
+              {t('disconnect.button')}
             </button>
           </div>
         </div>
       )}
 
+      {/* デイリーボーナストースト */}
+      {dailyBonus !== null && (
+        <div
+          className="fixed left-1/2 -translate-x-1/2 z-50 bg-gradient-to-r from-yellow-400 to-yellow-300 text-black rounded-xl shadow-2xl px-5 py-3 flex items-center gap-3"
+          role="alert"
+          aria-live="polite"
+          style={{ top: 'calc(1.25rem + env(safe-area-inset-top))' }}
+        >
+          <div className="text-3xl">🎁</div>
+          <div>
+            <div className="font-bold text-sm">{t('dailyBonus.title')}</div>
+            <div className="font-black text-lg">{t('dailyBonus.amount', { amount: dailyBonus })}</div>
+          </div>
+        </div>
+      )}
       {error && (
-        <div className="fixed bottom-4 right-4 bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50">
+        <div
+          className="fixed bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50"
+          style={{
+            bottom: 'calc(1rem + env(safe-area-inset-bottom))',
+            right: 'calc(1rem + env(safe-area-inset-right))',
+          }}
+        >
           <span>{error}</span>
           <button onClick={() => setError('')} className="font-bold">✕</button>
         </div>

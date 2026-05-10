@@ -16,7 +16,8 @@ db.exec(`
     name TEXT NOT NULL,
     total_points INTEGER NOT NULL DEFAULT 0,
     games_played INTEGER NOT NULL DEFAULT 0,
-    last_seen TEXT
+    last_seen TEXT,
+    last_bonus_date TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_total_points ON player_stats(total_points DESC);
   CREATE INDEX IF NOT EXISTS idx_last_seen ON player_stats(last_seen);
@@ -63,6 +64,31 @@ db.exec(`
 function currentMonth() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function todayDateString() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// 既存DBに last_bonus_date カラムが無ければ追加 (マイグレーション)
+try {
+  const cols = db.prepare("PRAGMA table_info(player_stats)").all();
+  if (!cols.some(c => c.name === 'last_bonus_date')) {
+    db.exec(`ALTER TABLE player_stats ADD COLUMN last_bonus_date TEXT`);
+  }
+} catch (err) {
+  console.error('[stats] migration last_bonus_date failed:', err.message);
+}
+
+// 当日のデイリーボーナスをまだ受け取っていなければ true を返し、受領済として記録する
+function claimDailyBonusIfEligible(uuid) {
+  const today = todayDateString();
+  const row = db.prepare('SELECT last_bonus_date FROM player_stats WHERE uuid = ?').get(uuid);
+  if (!row) return false; // プレイヤー未登録
+  if (row.last_bonus_date === today) return false;
+  db.prepare('UPDATE player_stats SET last_bonus_date = ? WHERE uuid = ?').run(today, uuid);
+  return true;
 }
 
 // 初回のみ playerStats.json から移行
@@ -399,4 +425,5 @@ module.exports = {
   getAllStats, resetAllStats, getSummaryStats, resetPlayerStats,
   banUUID, unbanUUID, isBanned, getBannedList,
   recordCardPlay, recordGameStart, getCardUsageStats, getHourlyActivity, getTypeStats,
+  claimDailyBonusIfEligible,
 };

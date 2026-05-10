@@ -99,7 +99,10 @@ function endRound(room, currentPlayer, previousPlayerName, scenario) {
     }
     room.roundResult = {
       scenario,
+      // 後方互換のため description はそのまま、descriptionKey + descriptionParams をクライアントで翻訳
       description: `${currentPlayer.name} がぴったり101！`,
+      descriptionKey: 'round.scenario.101',
+      descriptionParams: { name: currentPlayer.name },
       pointChanges: buildPointChanges(room, changes)
     };
   } else if (scenario === '102') {
@@ -112,6 +115,8 @@ function endRound(room, currentPlayer, previousPlayerName, scenario) {
     room.roundResult = {
       scenario,
       description: `${currentPlayer.name} がオーバー！`,
+      descriptionKey: 'round.scenario.102',
+      descriptionParams: { name: currentPlayer.name },
       pointChanges: buildPointChanges(room, changes)
     };
   } else if (scenario === 'joker101') {
@@ -126,6 +131,8 @@ function endRound(room, currentPlayer, previousPlayerName, scenario) {
     room.roundResult = {
       scenario,
       description: `${currentPlayer.name} が100でJokerを炸裂！`,
+      descriptionKey: 'round.scenario.joker101',
+      descriptionParams: { name: currentPlayer.name },
       pointChanges: buildPointChanges(room, changes)
     };
   }
