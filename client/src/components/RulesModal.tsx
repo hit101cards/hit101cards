@@ -3,7 +3,7 @@ import { useLocale, t } from '../i18n';
 export default function RulesModal({ onClose }: { onClose: () => void }) {
   useLocale();
   return (
-    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-label={t('rules.title')}>
+    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-[110] p-4 overflow-y-auto" role="dialog" aria-modal="true" aria-label={t('rules.title')}>
       <div className="bg-green-800 rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-green-600 my-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-yellow-400">{t('rules.title')}</h2>
