@@ -207,6 +207,8 @@ function createGame(playerList) {
   const players = playerList.map(p => ({
     id: p.id,
     name: p.name,
+    avatar: p.avatar,   // 保持: 待機中に選んだアバター
+    skill: p.skill,     // 保持: Bot のスキルレベル
     hand: [],
     lost: false,
     disconnected: false,
