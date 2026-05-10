@@ -71,8 +71,6 @@ export default function App() {
   const [actionInProgress, setActionInProgress] = useState(false); // 連打防止
   const [disconnectedAt, setDisconnectedAtState] = useState<number | null>(null);
   const [reconnectCountdown, setReconnectCountdown] = useState(60);
-  const [dailyBonus, setDailyBonus] = useState<number | null>(null);
-  const dailyBonusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const disconnectedAtRef = useRef<number | null>(null);
   const phaseRef = useRef<string>('reconnecting');
 
@@ -204,14 +202,6 @@ export default function App() {
       if (typeof cds === 'number') setCountdownSeconds(cds);
       if (mqPlayers) setMatchPlayers(mqPlayers);
     });
-    socket.on('daily-bonus', ({ amount }: { amount: number }) => {
-      setDailyBonus(amount);
-      if (dailyBonusTimerRef.current) clearTimeout(dailyBonusTimerRef.current);
-      dailyBonusTimerRef.current = setTimeout(() => {
-        setDailyBonus(null);
-        dailyBonusTimerRef.current = null;
-      }, 4500);
-    });
     socket.on('matchmaking-matched', ({ roomId: rid, state }: { roomId: string; state: GameState }) => {
       setMyId(socket.id!);
       setRoomId(rid);
@@ -230,7 +220,6 @@ export default function App() {
       socket.off('return-to-matchmaking');
       socket.off('matchmaking-update');
       socket.off('matchmaking-matched');
-      socket.off('daily-bonus');
     };
   }, []);
 
@@ -608,27 +597,6 @@ export default function App() {
         </div>
       )}
 
-      {/* デイリーボーナストースト */}
-      {dailyBonus !== null && (
-        <div
-          className="fixed left-1/2 z-50 rounded-2xl shadow-2xl px-6 py-3 flex items-center gap-3 animate-toast-in border-2"
-          role="alert"
-          aria-live="polite"
-          style={{
-            top: 'calc(1.25rem + env(safe-area-inset-top))',
-            background: 'linear-gradient(135deg, #fde047 0%, #facc15 50%, #eab308 100%)',
-            borderColor: 'rgba(255,255,255,0.4)',
-            boxShadow: '0 12px 32px rgba(250,204,21,0.5), inset 0 1px 0 rgba(255,255,255,0.4)',
-            color: '#1f2937',
-          }}
-        >
-          <div className="text-3xl drop-shadow-md">🎁</div>
-          <div>
-            <div className="font-bold text-xs uppercase tracking-wider opacity-80">{t('dailyBonus.title')}</div>
-            <div className="font-black text-xl tabular-nums">{t('dailyBonus.amount', { amount: dailyBonus })}</div>
-          </div>
-        </div>
-      )}
       {error && (
         <div
           className="fixed bg-red-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 z-50"

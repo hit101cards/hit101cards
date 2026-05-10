@@ -7,21 +7,7 @@ const {
   getAllStats, resetAllStats, getSummaryStats, resetPlayerStats,
   banUUID, unbanUUID, isBanned, getBannedList,
   recordCardPlay, recordGameStart, getCardUsageStats, getHourlyActivity, getTypeStats,
-  claimDailyBonusIfEligible,
 } = require('./playerStats');
-
-// デイリーボーナス: 当日初参加なら +5pt を付与してクライアントに通知
-const DAILY_BONUS_AMOUNT = 5;
-function tryGrantDailyBonus(socket, uuid, name) {
-  if (!uuid) return;
-  // プレイヤーレコードを確実に作成 (delta=0 で upsert)
-  updateTotalPoints(uuid, name, 0);
-  if (claimDailyBonusIfEligible(uuid)) {
-    updateTotalPoints(uuid, name, DAILY_BONUS_AMOUNT);
-    socket.emit('daily-bonus', { amount: DAILY_BONUS_AMOUNT });
-    logAudit('daily-bonus', { uuid: uuid.slice(0, 8), amount: DAILY_BONUS_AMOUNT });
-  }
-}
 const { decideBotMove, decideDrawnCardChoice } = require('./botAi');
 const { logAudit, isSuspiciousBurst, recordAction, clearAction } = require('./audit');
 
@@ -1094,7 +1080,6 @@ io.on('connection', (socket) => {
     socket.data.roomId = roomId;
     socket.data.playerName = name;
     socket.data.uuid = uuid;
-    tryGrantDailyBonus(socket, uuid, name);
     cb({ success: true, roomId, state: publicState(room, socket.id) });
   });
 
@@ -1119,7 +1104,6 @@ io.on('connection', (socket) => {
     socket.data.roomId = roomId;
     socket.data.playerName = name;
     socket.data.uuid = uuid;
-    tryGrantDailyBonus(socket, uuid, name);
     broadcastToRoom(room);
     cb({ success: true, roomId, state: publicState(room, socket.id) });
   });
@@ -1222,7 +1206,6 @@ io.on('connection', (socket) => {
     socket.data.inMatchmaking = true;
     socket.data.uuid = uuid;
     socket.data.avatar = safeAvatar;
-    tryGrantDailyBonus(socket, uuid, name);
     socket.data.playerName = name;
     socket.data.matchUUID = uuid || null;
 
