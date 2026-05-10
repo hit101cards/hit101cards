@@ -2,13 +2,14 @@ const SUITS = ['♠', '♥', '♦', '♣'];
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const INITIAL_HAND_SIZE = 2;
 
+// ポイント分配 (ランキング競争を活発にするため、振れ幅を約 2 倍に調整)
 const PTS = {
-  HIT_101: 5,
-  SETUP_101: -2,
-  BUST: -2,
-  FORCE_BUST: 3,
-  JOKER_WIN: 8,
-  JOKER_LOSE: -1,
+  HIT_101: 10,      // ピッタリ101を出した人 (旧 +5)
+  SETUP_101: -3,    // 直前のプレイヤー (旧 -2)
+  BUST: -5,         // バーストした人 (旧 -2、痛い罰でリスク管理を促進)
+  FORCE_BUST: 3,    // 直前のプレイヤー (維持)
+  JOKER_WIN: 15,    // 100 で Joker を出した人 (旧 +8、伝説の手感を強化)
+  JOKER_LOSE: -1,   // 他全員 (維持)
 };
 
 function createDeck() {

@@ -176,13 +176,13 @@ test('Joker (合計 100): +1 = ジャスト 101 で joker101 シナリオ勝利'
   assert.equal(room.currentTotal, 101);
   assert.equal(room.status, 'roundEnd');
   assert.equal(room.roundResult.scenario, 'joker101');
-  // joker101: 出した人 +8、他全員 -1
-  assert.equal(room.points['A'], 8);
+  // joker101: 出した人 +15、他全員 -1
+  assert.equal(room.points['A'], 15);
   assert.equal(room.points['B'], -1);
 });
 
 // ─── 101 ちょうど ──────────────────────────────────────────────────
-test('101 ちょうど: 出した人 +5、前の人 -2', () => {
+test('101 ちょうど: 出した人 +10、前の人 -3', () => {
   const room = makeRoom(['A', 'B']);
   room.currentTotal = 99;
   room.previousPlayerName = 'B';
@@ -192,22 +192,22 @@ test('101 ちょうど: 出した人 +5、前の人 -2', () => {
   assert.equal(room.currentTotal, 101);
   assert.equal(room.status, 'roundEnd');
   assert.equal(room.roundResult.scenario, '101');
-  assert.equal(room.points['A'], 5);
-  assert.equal(room.points['B'], -2);
+  assert.equal(room.points['A'], 10);
+  assert.equal(room.points['B'], -3);
 });
 
-test('101 ちょうど (前の人なし): 出した人だけ +5', () => {
+test('101 ちょうど (前の人なし): 出した人だけ +10', () => {
   const room = makeRoom(['A', 'B']);
   room.currentTotal = 99;
   room.previousPlayerName = null;
   const card = dealRankToPlayer(room, 0, '2');
   processPlayCard(room, room.players[0].id, card.id);
-  assert.equal(room.points['A'], 5);
+  assert.equal(room.points['A'], 10);
   assert.equal(room.points['B'], 0);
 });
 
 // ─── 102 以上 (バースト) ──────────────────────────────────────────
-test('102 ちょうど: 出した人 -2、前の人 +3', () => {
+test('102 ちょうど: 出した人 -5、前の人 +3', () => {
   const room = makeRoom(['A', 'B']);
   room.currentTotal = 99;
   room.previousPlayerName = 'B';
@@ -217,11 +217,11 @@ test('102 ちょうど: 出した人 -2、前の人 +3', () => {
   assert.equal(room.currentTotal, 102);
   assert.equal(room.status, 'roundEnd');
   assert.equal(room.roundResult.scenario, '102');
-  assert.equal(room.points['A'], -2);
+  assert.equal(room.points['A'], -5);
   assert.equal(room.points['B'], 3);
 });
 
-test('110 (大幅バースト) でも -2 / +3 (一律)', () => {
+test('110 (大幅バースト) でも -5 / +3 (一律)', () => {
   const room = makeRoom(['A', 'B']);
   room.currentTotal = 100;
   room.previousPlayerName = 'B';
@@ -229,7 +229,7 @@ test('110 (大幅バースト) でも -2 / +3 (一律)', () => {
   processPlayCard(room, room.players[0].id, card.id);
   assert.equal(room.currentTotal, 110);
   assert.equal(room.roundResult.scenario, '102');
-  assert.equal(room.points['A'], -2);
+  assert.equal(room.points['A'], -5);
 });
 
 // ─── ターン進行 ────────────────────────────────────────────────────
@@ -403,8 +403,8 @@ test('roundResult.pointChanges に正しい値が含まれる (101 シナリオ)
   const changes = room.roundResult.pointChanges;
   const a = changes.find(c => c.playerName === 'A');
   const b = changes.find(c => c.playerName === 'B');
-  assert.equal(a.change, 5);
-  assert.equal(b.change, -2);
+  assert.equal(a.change, 10);
+  assert.equal(b.change, -3);
 });
 
 test('roundResult.descriptionKey + descriptionParams が含まれる', () => {

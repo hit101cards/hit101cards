@@ -355,19 +355,19 @@ export default function RulesModal({ onClose }: { onClose: () => void }) {
               {/* 101 ジャスト */}
               <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-xl p-4">
                 <h4 className="font-black text-yellow-300 mb-2">{C.pointWin101.title}</h4>
-                <PointRow who={C.pointWin101.played} value="+5" positive />
-                <PointRow who={C.pointWin101.previous} value="-2" />
+                <PointRow who={C.pointWin101.played} value="+10" positive big />
+                <PointRow who={C.pointWin101.previous} value="-3" />
               </div>
               {/* 102 バースト */}
               <div className="bg-red-900/30 border border-red-500/50 rounded-xl p-4">
                 <h4 className="font-black text-red-300 mb-2">{C.pointBust.title}</h4>
-                <PointRow who={C.pointBust.played} value="-2" />
+                <PointRow who={C.pointBust.played} value="-5" />
                 <PointRow who={C.pointBust.previous} value="+3" positive />
               </div>
               {/* Joker on 100 */}
               <div className="bg-purple-900/30 border border-purple-400/50 rounded-xl p-4">
                 <h4 className="font-black text-purple-200 mb-2">{C.pointJoker.title}</h4>
-                <PointRow who={C.pointJoker.played} value="+8" positive big />
+                <PointRow who={C.pointJoker.played} value="+15" positive big />
                 <PointRow who={C.pointJoker.others} value="-1" />
               </div>
             </div>
