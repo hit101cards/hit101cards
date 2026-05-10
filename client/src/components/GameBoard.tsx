@@ -86,10 +86,14 @@ interface Props {
 
 function OtherPlayerArea({ player, isCurrentTurn, points, cumulative, elRef }: { player: Player; isCurrentTurn: boolean; points: number; cumulative?: { totalPoints: number } | null; elRef?: (el: HTMLDivElement | null) => void }) {
   useLocale();
+  // Bot のスキルアイコン (絵文字のみ)
+  const skillIcon = player.isBot && player.skill
+    ? (player.skill === 'beginner' ? '🟢' : player.skill === 'expert' ? '🔴' : '🟡')
+    : '';
   return (
     <div ref={elRef} className={`text-center p-1.5 sm:p-2 rounded-xl transition-all w-[5.5rem] sm:w-[7rem] flex-shrink-0 ${isCurrentTurn && !player.lost && !player.disconnected ? 'ring-2 ring-yellow-400 bg-yellow-400/10' : ''}`}>
       <p className={`text-sm sm:text-base font-bold truncate ${player.lost ? 'text-red-400 line-through' : player.disconnected ? 'text-gray-400' : isCurrentTurn ? 'text-yellow-400' : 'text-green-300'}`}>
-        {player.isBot ? '🤖 ' : (player.avatar ? player.avatar + ' ' : '')}{player.name}{player.disconnected ? '🔌' : ''}{isCurrentTurn && !player.lost && !player.disconnected ? '←' : ''}
+        {player.isBot ? `🤖${skillIcon} ` : (player.avatar ? player.avatar + ' ' : '')}{player.name}{player.disconnected ? '🔌' : ''}{isCurrentTurn && !player.lost && !player.disconnected ? '←' : ''}
       </p>
       <p className="text-yellow-300 text-xs sm:text-sm font-bold">{points >= 0 ? '+' : ''}{points}pt</p>
       {cumulative != null && (
@@ -117,7 +121,9 @@ function EndScreen({ players, points, cumulativeStats, onRestart }: { players: P
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{medals[i] || `${i + 1}.`}</span>
-                  <span className={`font-bold ${i === 0 ? 'text-yellow-300' : 'text-white'}`}>{p.name}</span>
+                  <span className={`font-bold ${i === 0 ? 'text-yellow-300' : 'text-white'}`}>
+                    {p.isBot ? `🤖${p.skill === 'beginner' ? '🟢' : p.skill === 'expert' ? '🔴' : p.skill === 'intermediate' ? '🟡' : ''} ` : ''}{p.name}
+                  </span>
                 </div>
                 <span className={`text-xl font-bold ${(points[p.name] || 0) >= 0 ? 'text-green-300' : 'text-red-400'}`}>
                   {(points[p.name] || 0) >= 0 ? '+' : ''}{points[p.name] || 0}pt
@@ -333,7 +339,12 @@ function WaitingScreen({ gameState, myId, onStartGame, onLeaveClick }: { gameSta
               <span className="text-lg">{p.isBot ? '🤖' : (p.avatar || (i === 0 ? '👑' : '👤'))}</span>
               <span className="text-white font-medium flex-1">{p.name}</span>
               {p.isBot && p.skill && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/30 text-yellow-200">
+                <span
+                  className={`text-xs font-bold px-2 py-0.5 rounded-full text-white shadow-md ${
+                    p.skill === 'beginner' ? 'bg-green-600' :
+                    p.skill === 'expert' ? 'bg-red-600' : 'bg-yellow-600'
+                  }`}
+                >
                   {t(`wait.bot.${p.skill}`)}
                 </span>
               )}
