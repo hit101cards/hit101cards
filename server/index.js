@@ -627,6 +627,8 @@ function publicState(room, viewerId) {
     players: room.players.map(p => ({
       id: p.id,
       name: p.name,
+      avatar: p.avatar,
+      skill: p.skill,
       handCount: p.hand.length,
       hand: p.id === viewerId ? p.hand : null,
       lost: p.lost,
