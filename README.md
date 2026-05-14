@@ -120,3 +120,7 @@ npm run loadtest 100 4 60 http://localhost:3001
 ## お問い合わせ
 
 solabstudio.jp@gmail.com
+
+## リポジトリ
+
+https://github.com/solabstudio/hit101cards (2026-05-15 に `hit101cards` org から移行)
