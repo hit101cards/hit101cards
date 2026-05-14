@@ -119,4 +119,4 @@ npm run loadtest 100 4 60 http://localhost:3001
 
 ## お問い合わせ
 
-hit101cards@gmail.com
+solabstudio.jp@gmail.com

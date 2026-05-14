@@ -122,7 +122,7 @@ Hit101（ヒットワンオーワン）公式チャンネル
 | ユーザー名 | `hit101cards` |
 | 表示名（30字以内） | `Hit101｜カードゲーム` |
 | カテゴリ | `Game` or `Brand` |
-| 連絡先 | hit101cards@gmail.com |
+| 連絡先 | solabstudio.jp@gmail.com |
 | ウェブサイト | `https://hit101.cards` |
 
 ### bio（150字以内）
